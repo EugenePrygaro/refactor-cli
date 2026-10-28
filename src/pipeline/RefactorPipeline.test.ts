@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { LLMProvider, RefactoringContext } from '../llm/LLMProvider';
-import { RefactorPipeline } from './RefactorPipeline';
+import { PipelineError, RefactorPipeline, type VerificationStep } from './RefactorPipeline';
 
 const temporaryDirectories: string[] = [];
 
@@ -15,6 +15,76 @@ afterEach(async () => {
 });
 
 describe('RefactorPipeline', () => {
+    it('returns the successful attempt count', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        let verifications = 0;
+        const verificationStep: VerificationStep = {
+            name: 'Test',
+            async verify() {
+                verifications++;
+                return verifications === 1 ? ['retry'] : [];
+            },
+        };
+        const llm: LLMProvider = {
+            name: 'test',
+            async refactorComponent() {
+                return {
+                    generatedCode: 'export const value = 1;',
+                    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                };
+            },
+        };
+
+        const result = await new RefactorPipeline(llm, 3, [verificationStep])
+            .runWithAttempts(sourcePath, '', '');
+
+        expect(result).toEqual({
+            generatedCode: 'export const value = 1;',
+            attempts: 2,
+            usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+            failureStage: 'None',
+        });
+    });
+
+    it('includes the attempt count in failures', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        const verificationStep: VerificationStep = {
+            name: 'Test',
+            async verify() {
+                return ['invalid'];
+            },
+        };
+        const llm: LLMProvider = {
+            name: 'test',
+            async refactorComponent() {
+                return {
+                    generatedCode: 'export const value = 1;',
+                    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                };
+            },
+        };
+
+        await expect(
+            new RefactorPipeline(llm, 2, [verificationStep]).runWithAttempts(
+                sourcePath,
+                '',
+                '',
+            ),
+        ).rejects.toMatchObject<Partial<PipelineError>>({
+            attempts: 2,
+            usage: { promptTokens: 20, completionTokens: 10, totalTokens: 30 },
+            failureStage: 'Test',
+        });
+    });
+
     it('stops at the first failed check and sends its error to the next LLM attempt', async () => {
         const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
         temporaryDirectories.push(directory);
@@ -57,7 +127,10 @@ describe('RefactorPipeline', () => {
                 if (response === undefined) {
                     throw new Error('No generated response remains.');
                 }
-                return response;
+                return {
+                    generatedCode: response,
+                    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                };
             },
         };
 

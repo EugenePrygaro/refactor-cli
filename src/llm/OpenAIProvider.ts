@@ -1,30 +1,28 @@
 import OpenAI from 'openai';
-import type { LLMProvider, RefactoringContext } from './LLMProvider';
-
-export interface OpenAIProviderOptions {
-    baseURL?: string;
-    model?: string;
-}
+import type {
+    LLMProvider,
+    RefactoringContext,
+    RefactoringResult,
+} from './LLMProvider';
 
 export class OpenAIProvider implements LLMProvider {
-    public name = 'OpenAI-compatible API';
-    private client: OpenAI;
-    private model: string;
+    readonly name = 'OpenAI-compatible API';
+    private readonly client: OpenAI;
 
     constructor(
         apiKey: string,
-        { baseURL, model = 'gpt-4o-mini' }: OpenAIProviderOptions = {},
+        private readonly modelName: string,
+        baseURL?: string,
     ) {
         this.client = new OpenAI({
-            apiKey,
+            apiKey: apiKey || 'ollama',
             ...(baseURL ? { baseURL } : {}),
         });
-        this.model = model;
     }
 
-    async refactorComponent(context: RefactoringContext): Promise<string> {
+    async refactorComponent(context: RefactoringContext): Promise<RefactoringResult> {
         const response = await this.client.chat.completions.create({
-            model: this.model,
+            model: this.modelName,
             messages: [{ role: 'user', content: this.buildPrompt(context) }],
             temperature: 0.1,
         });
@@ -34,7 +32,18 @@ export class OpenAIProvider implements LLMProvider {
             throw new Error('OpenAI-compatible API returned an empty response.');
         }
 
-        return this.cleanResponse(content);
+        const promptTokens = response.usage?.prompt_tokens ?? 0;
+        const completionTokens = response.usage?.completion_tokens ?? 0;
+
+        return {
+            generatedCode: this.cleanResponse(content),
+            usage: {
+                promptTokens,
+                completionTokens,
+                totalTokens:
+                    response.usage?.total_tokens ?? promptTokens + completionTokens,
+            },
+        };
     }
 
     private buildPrompt(context: RefactoringContext): string {

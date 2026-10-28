@@ -2,6 +2,10 @@ declare module 'typhonjs-escomplex' {
     interface ESComplexReport {
         aggregate: {
             cyclomatic: number;
+            halstead: {
+                effort: number;
+                volume: number;
+            };
             sloc: {
                 logical: number;
                 physical: number;

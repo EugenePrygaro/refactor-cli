@@ -4,6 +4,8 @@ export interface CodeMetrics {
     cyclomaticComplexity: number;
     maintainabilityIndex: number;
     sloc: number;
+    halsteadEffort: number;
+    halsteadVolume: number;
 }
 
 export function calculateMetrics(sourceCode: string): CodeMetrics {
@@ -13,5 +15,7 @@ export function calculateMetrics(sourceCode: string): CodeMetrics {
         cyclomaticComplexity: report.aggregate.cyclomatic,
         maintainabilityIndex: report.maintainability,
         sloc: report.aggregate.sloc.logical,
+        halsteadEffort: report.aggregate.halstead.effort,
+        halsteadVolume: report.aggregate.halstead.volume,
     };
 }

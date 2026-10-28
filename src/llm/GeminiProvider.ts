@@ -1,5 +1,9 @@
 import { GoogleGenAI } from '@google/genai';
-import type { LLMProvider, RefactoringContext } from './LLMProvider';
+import type {
+    LLMProvider,
+    RefactoringContext,
+    RefactoringResult,
+} from './LLMProvider';
 
 export class GeminiProvider implements LLMProvider {
     readonly name = 'Gemini 2.0 Flash';
@@ -9,7 +13,7 @@ export class GeminiProvider implements LLMProvider {
         this.ai = new GoogleGenAI({ apiKey });
     }
 
-    async refactorComponent(context: RefactoringContext): Promise<string> {
+    async refactorComponent(context: RefactoringContext): Promise<RefactoringResult> {
         const response = await this.ai.models.generateContent({
             model: 'gemini-2.0-flash',
             contents: this.buildPrompt(context),
@@ -21,7 +25,18 @@ export class GeminiProvider implements LLMProvider {
             throw new Error('Gemini returned an empty response.');
         }
 
-        return this.cleanResponse(text);
+        const usage = response.usageMetadata;
+        const promptTokens = usage?.promptTokenCount ?? 0;
+        const completionTokens = usage?.candidatesTokenCount ?? 0;
+
+        return {
+            generatedCode: this.cleanResponse(text),
+            usage: {
+                promptTokens,
+                completionTokens,
+                totalTokens: usage?.totalTokenCount ?? promptTokens + completionTokens,
+            },
+        };
     }
 
     private buildPrompt(context: RefactoringContext): string {

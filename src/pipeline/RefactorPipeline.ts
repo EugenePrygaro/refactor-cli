@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { sliceContext } from '../ast/slicer';
-import type { LLMProvider } from '../llm/LLMProvider';
+import type { LLMProvider, TokenUsage } from '../llm/LLMProvider';
 import { lintCode } from '../verification/linter';
 import { runTests } from '../verification/tester';
 
@@ -12,6 +12,28 @@ export interface VerificationContext {
 export interface VerificationStep {
     name: string;
     verify(code: string, context: VerificationContext): Promise<string[]>;
+}
+
+export interface PipelineRunResult {
+    generatedCode: string;
+    attempts: number;
+    usage: TokenUsage;
+    failureStage: FailureStage;
+}
+
+export type FailureStage = 'Syntax' | 'Linter' | 'Test' | 'None';
+
+export class PipelineError extends Error {
+    constructor(
+        message: string,
+        readonly attempts: number,
+        readonly usage: TokenUsage,
+        readonly failureStage: FailureStage,
+        options?: ErrorOptions,
+    ) {
+        super(message, options);
+        this.name = 'PipelineError';
+    }
 }
 
 const syntaxVerification: VerificationStep = {
@@ -71,36 +93,93 @@ export class RefactorPipeline {
         generatedPath: string,
         testPath: string,
     ): Promise<string> {
+        const result = await this.runWithAttempts(sourcePath, generatedPath, testPath);
+        return result.generatedCode;
+    }
+
+    async runWithAttempts(
+        sourcePath: string,
+        generatedPath: string,
+        testPath: string,
+    ): Promise<PipelineRunResult> {
         const sourceCode = readFileSync(sourcePath, 'utf8');
         const context = sliceContext(sourceCode);
         let lastError = 'No verification steps were configured.';
+        let failureStage: FailureStage = 'None';
+        const totalUsage: TokenUsage = {
+            promptTokens: 0,
+            completionTokens: 0,
+            totalTokens: 0,
+        };
 
         for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
-            const generatedCode = await this.llm.refactorComponent(context);
-            let verificationError: string | undefined;
+            let activeFailureStage: FailureStage = 'None';
+            try {
+                const result = await this.llm.refactorComponent(context);
+                totalUsage.promptTokens += result.usage.promptTokens;
+                totalUsage.completionTokens += result.usage.completionTokens;
+                totalUsage.totalTokens += result.usage.totalTokens;
+                let verificationError: string | undefined;
 
-            for (const step of this.verificationSteps) {
-                const errors = await step.verify(generatedCode, {
-                    generatedPath,
-                    testPath,
-                });
+                for (const step of this.verificationSteps) {
+                    activeFailureStage = toFailureStage(step.name);
+                    const errors = await step.verify(result.generatedCode, {
+                        generatedPath,
+                        testPath,
+                    });
 
-                if (errors.length > 0) {
-                    verificationError = `${step.name} verification failed:\n${errors.join('\n')}`;
-                    break;
+                    if (errors.length > 0) {
+                        verificationError = `${step.name} verification failed:\n${errors.join('\n')}`;
+                        break;
+                    }
                 }
-            }
 
-            if (verificationError === undefined) {
-                return generatedCode;
-            }
+                if (verificationError === undefined) {
+                    return {
+                        generatedCode: result.generatedCode,
+                        attempts: attempt,
+                        usage: { ...totalUsage },
+                        failureStage: 'None',
+                    };
+                }
 
-            lastError = verificationError;
-            context.errorMessage = verificationError;
+                lastError = verificationError;
+                failureStage = activeFailureStage;
+                context.errorMessage = verificationError;
+            } catch (error: unknown) {
+                throw new PipelineError(
+                    `Refactoring attempt ${attempt} failed: ${getErrorMessage(error)}`,
+                    attempt,
+                    { ...totalUsage },
+                    activeFailureStage,
+                    { cause: error },
+                );
+            }
         }
 
-        throw new Error(
+        throw new PipelineError(
             `Refactoring failed after ${this.maxAttempts} attempts.\nLast verification error:\n${lastError}`,
+            this.maxAttempts,
+            { ...totalUsage },
+            failureStage,
         );
     }
+}
+
+function toFailureStage(stepName: string): FailureStage {
+    switch (stepName.toLowerCase()) {
+        case 'syntax':
+            return 'Syntax';
+        case 'linter':
+            return 'Linter';
+        case 'test':
+        case 'unit tests':
+            return 'Test';
+        default:
+            return 'None';
+    }
+}
+
+function getErrorMessage(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
 }
