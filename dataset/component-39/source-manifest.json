@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/querying/common/components/DataSelector/DataSelector.tsx",
+  "sourceSha256": "bf0f68058694f7d20535f43f8a7577a033951a4c063705b0ae2e519834c5d24a",
+  "testFiles": [
+    "metabase/frontend/src/metabase/querying/common/components/DataSelector/DataSelector.unit.spec.tsx"
+  ],
+  "archivedTestFiles": [
+    "metabase/frontend/src/metabase/querying/common/components/DataSelector/DataSelector.unit.spec.tsx.reference"
+  ]
+}

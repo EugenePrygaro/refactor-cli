@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization.tsx",
+  "sourceSha256": "05d145582f80efdb5a6193e2b99b1be44a96d82614038c2c4f2f068a39143f7c",
+  "testFiles": [
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-loading.unit.spec.tsx",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-object.unit.spec.tsx",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-themed.unit.spec.tsx",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization.legend-links.unit.spec.tsx",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization.unit.spec.tsx"
+  ],
+  "archivedTestFiles": [
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-loading.unit.spec.tsx.reference",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-object.unit.spec.tsx.reference",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization-themed.unit.spec.tsx.reference",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization.legend-links.unit.spec.tsx.reference",
+    "metabase/frontend/src/metabase/visualizations/components/Visualization/Visualization.unit.spec.tsx.reference"
+  ]
+}

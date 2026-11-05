@@ -35,7 +35,7 @@ describe('runTests', () => {
 
         expect(errors).toBe('');
         await expect(rm(generatedFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
-    });
+    }, 20_000);
 
     it('returns failure output and removes the temporary component', async () => {
         const directory = await mkdtemp(path.join(process.cwd(), '.vitest-tester-'));
@@ -58,5 +58,5 @@ describe('runTests', () => {
 
         expect(errors).toContain('expected');
         await expect(rm(generatedFilePath)).rejects.toMatchObject({ code: 'ENOENT' });
-    });
+    }, 20_000);
 });

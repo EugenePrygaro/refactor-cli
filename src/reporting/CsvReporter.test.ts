@@ -22,9 +22,13 @@ describe('CsvReporter', () => {
         const reporter = new CsvReporter(filePath);
 
         await reporter.appendResult({
+            runId: 'run-01',
+            provider: 'ollama',
+            model: 'qwen-test',
             component: 'component-01',
             durationMs: 1520,
             attempts: 2,
+            retries: 1,
             status: 'Success',
             promptTokens: 100,
             completionTokens: 50,
@@ -46,9 +50,13 @@ describe('CsvReporter', () => {
             },
         });
         await reporter.appendResult({
+            runId: 'run-01',
+            provider: 'ollama',
+            model: 'qwen-test',
             component: 'component,02',
             durationMs: 600,
             attempts: 3,
+            retries: 0,
             status: 'Fail',
             promptTokens: 300,
             completionTokens: 90,
@@ -59,9 +67,13 @@ describe('CsvReporter', () => {
 
         const report = await readFile(filePath, 'utf8');
         const failedRow = [
+            'run-01',
+            'ollama',
+            'qwen-test',
             '"component,02"',
             '600',
             '3',
+            '0',
             'Fail',
             '',
             '',
@@ -80,8 +92,8 @@ describe('CsvReporter', () => {
             '"Tests failed: ""expected 1""\nreceived 2"',
         ].join(',');
         expect(report).toBe(
-            'component,duration_ms,attempts,status,before_cyclomatic_complexity,before_sloc,before_maintainability_index,after_cyclomatic_complexity,after_sloc,after_maintainability_index,PromptTokens,CompletionTokens,TotalTokens,HalsteadEffortBefore,HalsteadEffortAfter,HalsteadVolumeBefore,HalsteadVolumeAfter,FailureStage,failure_reason\n' +
-                'component-01,1520,2,Success,8,21,76.5,4,14,83,100,50,150,400,200,80,40,None,\n' +
+            'run_id,provider,model,component,duration_ms,attempts,api_retries,status,before_cyclomatic_complexity,before_sloc,before_maintainability_index,after_cyclomatic_complexity,after_sloc,after_maintainability_index,PromptTokens,CompletionTokens,TotalTokens,HalsteadEffortBefore,HalsteadEffortAfter,HalsteadVolumeBefore,HalsteadVolumeAfter,FailureStage,failure_reason\n' +
+                'run-01,ollama,qwen-test,component-01,1520,2,1,Success,8,21,76.5,4,14,83,100,50,150,400,200,80,40,None,\n' +
                 `${failedRow}\n`,
         );
     });

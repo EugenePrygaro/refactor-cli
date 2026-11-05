@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/add_user_to_group_multiselect/add_user_to_group_multiselect.tsx",
+  "sourceSha256": "27144319c9d460a4456302af0e5b3ec5df981fae4dfabf059b5a85c7021bee82",
+  "testFiles": [
+    "webapp/channels/src/components/add_user_to_group_multiselect/add_user_to_group_multiselect.test.tsx"
+  ]
+}

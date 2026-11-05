@@ -15,6 +15,27 @@ describe('createProvider', () => {
         expect(createProvider()).toBeInstanceOf(GeminiProvider);
     });
 
+    it('allows selecting an explicit model ID for each provider', () => {
+        vi.stubEnv('GEMINI_API_KEY', 'gemini-token');
+        vi.stubEnv('OPENAI_API_KEY', 'openai-token');
+        vi.stubEnv('OLLAMA_BASE_URL', 'http://localhost:11434/v1');
+
+        expect(createProvider('gemini', 'gemini-latest').modelName).toBe('gemini-latest');
+        expect(createProvider('openai', 'gpt-custom').modelName).toBe('gpt-custom');
+        expect(createProvider('ollama', 'qwen-custom').modelName).toBe('qwen-custom');
+    });
+
+    it('uses the Gemini model environment variable when no override is given', () => {
+        vi.stubEnv('GEMINI_API_KEY', 'gemini-token');
+        vi.stubEnv('GEMINI_MODEL', 'gemini-test');
+
+        expect(createProvider('gemini').modelName).toBe('gemini-test');
+    });
+
+    it('rejects an empty model override', () => {
+        expect(() => createProvider('openai', '  ')).toThrow('Model ID must not be empty.');
+    });
+
     it('creates OpenAI using OPENAI_API_KEY', () => {
         vi.stubEnv('ACTIVE_LLM', 'openai');
         vi.stubEnv('OPENAI_API_KEY', 'openai-token');

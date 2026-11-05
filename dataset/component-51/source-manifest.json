@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/common/components/ExplicitSize/ExplicitSize.tsx",
+  "sourceSha256": "e23aa685985c08aeb2e5016f1de9e9ac5866df83b25eae70ea8733d0e8fdec49",
+  "testFiles": [
+    "metabase/frontend/src/metabase/common/components/ExplicitSize/ExplicitSize.unit.spec.tsx"
+  ]
+}

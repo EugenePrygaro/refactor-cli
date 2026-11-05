@@ -1,7 +1,9 @@
 import 'dotenv/config';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { Command, Option } from 'commander';
+import type { LLMProvider } from './llm/LLMProvider';
 import { createProvider, type ProviderName } from './llm/ProviderFactory';
 import { calculateMetrics, type CodeMetrics } from './metrics/calculator';
 import {
@@ -13,8 +15,11 @@ import { CsvReporter } from './reporting/CsvReporter';
 
 export interface CliOptions {
     dataset: string;
-    model: ProviderName;
+    provider: ProviderName;
+    model?: string;
     out: string;
+    runId?: string;
+    components?: string[];
 }
 
 export interface ComponentJob {
@@ -84,17 +89,45 @@ function escapeRegExp(value: string): string {
     return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+export function parseComponentIds(value: string): string[] {
+    const componentIds = value.split(',').map((componentId) => componentId.trim());
+    if (
+        componentIds.length === 0 ||
+        componentIds.some((componentId) => !/^component-\d+$/i.test(componentId))
+    ) {
+        throw new Error(
+            'Components must be comma-separated component IDs, such as component-06,component-51.',
+        );
+    }
+    return componentIds;
+}
+
 export async function discoverComponentJobs(
     datasetPath: string,
     outputPath: string,
+    selectedComponents?: string[],
 ): Promise<ComponentJob[]> {
     const entries = await readdir(datasetPath, { withFileTypes: true });
     const componentDirectories = entries
         .filter((entry) => entry.isDirectory() && /^component-/i.test(entry.name))
         .sort((left, right) => left.name.localeCompare(right.name));
+    const selectedIds = selectedComponents
+        ? new Set(parseComponentIds(selectedComponents.join(',')))
+        : undefined;
+    if (selectedIds) {
+        const availableIds = new Set(componentDirectories.map(({ name }) => name));
+        const unknownIds = [...selectedIds].filter((id) => !availableIds.has(id));
+        if (unknownIds.length > 0) {
+            throw new Error(
+                `Unknown component ID(s): ${unknownIds.join(', ')}. Available IDs: ${[...availableIds].join(', ')}.`,
+            );
+        }
+    }
     const jobs: ComponentJob[] = [];
 
-    for (const directory of componentDirectories) {
+    for (const directory of componentDirectories.filter(
+        ({ name }) => !selectedIds || selectedIds.has(name),
+    )) {
         const componentPath = path.join(datasetPath, directory.name);
         const files = await readdir(componentPath);
         const sourceName = sourceFileName(files, directory.name);
@@ -122,11 +155,22 @@ export async function discoverComponentJobs(
     return jobs;
 }
 
-export async function runCli(options: CliOptions): Promise<void> {
+export async function runCli(
+    options: CliOptions,
+    providerOverride?: LLMProvider,
+): Promise<void> {
     const datasetPath = path.resolve(options.dataset);
-    const outputPath = path.resolve(options.out);
-    const jobs = await discoverComponentJobs(datasetPath, outputPath);
-    const provider = createProvider(options.model);
+    const provider = providerOverride ?? createProvider(options.provider, options.model);
+    const runId = createRunId(options.runId, provider.providerName, provider.modelName);
+    const outputRoot = path.resolve(options.out);
+    const outputPath = path.join(outputRoot, runId);
+    const jobs = await discoverComponentJobs(
+        datasetPath,
+        outputPath,
+        options.components,
+    );
+    await mkdir(outputRoot, { recursive: true });
+    await mkdir(outputPath);
     const pipeline = new RefactorPipeline(provider);
     const reporter = new CsvReporter(path.join(outputPath, 'report.csv'));
     let succeeded = 0;
@@ -138,6 +182,7 @@ export async function runCli(options: CliOptions): Promise<void> {
         let beforeMetrics: CodeMetrics | undefined;
         let afterMetrics: CodeMetrics | undefined;
         let attempts = 0;
+        let retries = 0;
         let status: 'Success' | 'Fail' = 'Fail';
         let failureReason: string | undefined;
         let failureStage: FailureStage = 'None';
@@ -154,6 +199,7 @@ export async function runCli(options: CliOptions): Promise<void> {
                 job.testPath,
             );
             attempts = result.attempts;
+            retries = result.retries;
             promptTokens = result.usage.promptTokens;
             completionTokens = result.usage.completionTokens;
             totalTokens = result.usage.totalTokens;
@@ -170,6 +216,7 @@ export async function runCli(options: CliOptions): Promise<void> {
             failureReason = getErrorMessage(error);
             if (error instanceof PipelineError) {
                 attempts = error.attempts;
+                retries = error.retries;
                 promptTokens = error.usage.promptTokens;
                 completionTokens = error.usage.completionTokens;
                 totalTokens = error.usage.totalTokens;
@@ -178,9 +225,13 @@ export async function runCli(options: CliOptions): Promise<void> {
         }
 
         await reporter.appendResult({
+            runId,
+            provider: provider.providerName,
+            model: provider.modelName,
             component: job.name,
             durationMs: Math.round(performance.now() - startedAt),
             attempts,
+            retries,
             status,
             promptTokens,
             completionTokens,
@@ -206,14 +257,21 @@ export async function runCli(options: CliOptions): Promise<void> {
 const program = new Command();
 program
     .name('refactor-cli')
-    .description('Refactor every component in a dataset directory.')
+    .description('Refactor components in a dataset directory.')
     .option('-d, --dataset <path>', 'Dataset directory to scan', './dataset')
     .addOption(
-        new Option('-m, --model <model>', 'LLM provider to use')
+        new Option('-p, --provider <provider>', 'LLM provider to use')
             .choices(['gemini', 'openai', 'ollama'])
             .default(process.env.ACTIVE_LLM ?? 'gemini'),
     )
-    .option('-o, --out <path>', 'Output directory', './results')
+    .option('-m, --model <model>', 'Model ID (overrides the provider-specific environment variable)')
+    .option('-o, --out <path>', 'Output root directory', './results')
+    .option(
+        '--components <ids>',
+        'Comma-separated component IDs to run (e.g. component-06,component-51)',
+        parseComponentIds,
+    )
+    .option('--run-id <id>', 'Run identifier (must be unique within the output directory)')
     .action(async (options: CliOptions) => {
         await runCli(options);
     });
@@ -223,4 +281,22 @@ if (require.main === module) {
         console.error(`Refactoring failed: ${getErrorMessage(error)}`);
         process.exitCode = 1;
     });
+}
+
+export function createRunId(
+    requestedRunId: string | undefined,
+    providerName: string,
+    modelName: string,
+): string {
+    if (requestedRunId !== undefined) {
+        if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(requestedRunId)) {
+            throw new Error('Run ID may contain only letters, numbers, dots, underscores, and hyphens.');
+        }
+        return requestedRunId;
+    }
+
+    const slug = (value: string) =>
+        value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    return `${slug(providerName)}-${slug(modelName)}-${timestamp}-${randomUUID().slice(0, 8)}`;
 }

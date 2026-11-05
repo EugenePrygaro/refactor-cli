@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/parameters/components/widgets/TextWidget/TextWidget.tsx",
+  "sourceSha256": "c4dcc83aae2e724f769f4ed231903731982aa436351d728b4299c6937b4b1df8",
+  "testFiles": [
+    "metabase/frontend/src/metabase/parameters/components/widgets/TextWidget/TextWidget.unit.spec.tsx"
+  ]
+}

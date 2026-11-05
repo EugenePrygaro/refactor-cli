@@ -4,18 +4,24 @@ import type {
     RefactoringContext,
     RefactoringResult,
 } from './LLMProvider';
+import { formatJSXDependencyContract } from './LLMProvider';
 
 export class GeminiProvider implements LLMProvider {
-    readonly name = 'Gemini 2.0 Flash';
+    readonly providerName = 'gemini';
+    readonly name: string;
     private readonly ai: GoogleGenAI;
 
-    constructor(apiKey: string) {
+    constructor(
+        apiKey: string,
+        readonly modelName = 'gemini-2.0-flash',
+    ) {
         this.ai = new GoogleGenAI({ apiKey });
+        this.name = `Gemini (${modelName})`;
     }
 
     async refactorComponent(context: RefactoringContext): Promise<RefactoringResult> {
         const response = await this.ai.models.generateContent({
-            model: 'gemini-2.0-flash',
+            model: this.modelName,
             contents: this.buildPrompt(context),
             config: { temperature: 0.1 },
         });
@@ -54,6 +60,19 @@ export class GeminiProvider implements LLMProvider {
             sections.push(
                 `Original imports:\n\`\`\`tsx\n${context.imports.join('\n')}\n\`\`\``,
             );
+        }
+
+        if (/\bJSX_MASK_\d+\b/.test(context.originalCode)) {
+            sections.push(
+                'Keep every JSX_MASK_N placeholder exactly unchanged and include each one exactly once in the refactored component.',
+            );
+        }
+
+        const dependencyContract = context.dependencyContract
+            ? formatJSXDependencyContract(context.dependencyContract)
+            : undefined;
+        if (dependencyContract) {
+            sections.push(dependencyContract);
         }
 
         sections.push(

@@ -1,0 +1,178 @@
+{
+  "version": 1,
+  "selectionRationale": "A 24-component stratified sample covering forms and inputs, tables/lists, admin workflows, navigation, modal content, data selection, visualizations, asynchronous actions, and settings. The legacy-focused additions include class components, deprecated HOCs, a legacy lifecycle, and Redux connection patterns, spanning low-to-very-high complexity.",
+  "components": [
+    {
+      "id": "component-06",
+      "name": "AddUserToGroupMultiSelect",
+      "category": "form-and-selection",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-08",
+      "name": "ChannelList",
+      "category": "table-and-policy-workflow",
+      "complexity": "high",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-12",
+      "name": "DataGrid",
+      "category": "reusable-table",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-17",
+      "name": "TeamList",
+      "category": "table-and-policy-workflow",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-18",
+      "name": "FeatureDiscovery",
+      "category": "admin-call-to-action",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-25",
+      "name": "LicenseSettings",
+      "category": "admin-settings",
+      "complexity": "high",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-27",
+      "name": "ManageTokensModal",
+      "category": "modal-and-empty-state",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-32",
+      "name": "AccordionList",
+      "category": "reusable-navigation",
+      "complexity": "medium",
+      "upstreamControl": true
+    },
+    {
+      "id": "component-36",
+      "name": "ModalContent",
+      "category": "reusable-layout",
+      "complexity": "low",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-38",
+      "name": "TextWidget",
+      "category": "form-input",
+      "complexity": "low",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-39",
+      "name": "UnconnectedDataSelector",
+      "category": "data-selection-workflow",
+      "complexity": "high",
+      "upstreamControl": true
+    },
+    {
+      "id": "component-43",
+      "name": "Visualization",
+      "category": "visualization",
+      "complexity": "very-high",
+      "upstreamControl": true
+    },
+    {
+      "id": "component-44",
+      "name": "RadioButtonGroup",
+      "category": "form-and-selection",
+      "complexity": "low",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-45",
+      "name": "SaveChangesPanel",
+      "category": "admin-form-actions",
+      "complexity": "low",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-46",
+      "name": "MigrationsTable",
+      "category": "async-admin-table",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-47",
+      "name": "TabsTab",
+      "category": "navigation",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-48",
+      "name": "TableVisibilityToggle",
+      "category": "async-data-action",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-49",
+      "name": "ForgotPassword",
+      "category": "authentication-form",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-50",
+      "name": "DefaultParametersSection",
+      "category": "settings-summary",
+      "complexity": "low",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-51",
+      "name": "ExplicitSize",
+      "category": "deprecated-layout-hoc",
+      "complexity": "high",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-52",
+      "name": "EditIncomingWebhook",
+      "category": "legacy-integration-form",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-53",
+      "name": "TagEditorParam",
+      "category": "legacy-query-parameter-editor",
+      "complexity": "very-high",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-54",
+      "name": "TableList",
+      "category": "legacy-metadata-list",
+      "complexity": "medium",
+      "upstreamControl": false
+    },
+    {
+      "id": "component-55",
+      "name": "ActionsMenu",
+      "category": "legacy-plugin-actions",
+      "complexity": "high",
+      "upstreamControl": false
+    }
+  ],
+  "testStrategy": {
+    "local": "Each LegacyComponent.test.tsx imports both LegacyComponent and ModernComponent and applies the same behavioral contract to both. External framework boundaries are replaced by the Vitest plugin and local support mocks.",
+    "upstreamControls": "Keep the original upstream test archives only for component-32, component-39, and component-43; use these as selective controls rather than as the main high-volume test suite."
+  }
+}

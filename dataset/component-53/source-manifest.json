@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/parameters/components/TagEditor/TagEditorParam.tsx",
+  "sourceSha256": "332e8eeefaa148ea10e474d72bcfec759ce4986e267f3aab7800fc9765d922d8",
+  "testFiles": [
+    "metabase/frontend/src/metabase/parameters/components/TagEditor/TagEditorParam.unit.spec.tsx"
+  ]
+}

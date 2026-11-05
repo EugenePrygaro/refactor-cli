@@ -1,22 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+// @vitest-environment happy-dom
 
-vi.mock("react", () => ({
-  "Component": vi.fn(() => vi.fn()),
-  "createRef": vi.fn(() => vi.fn()),
-}));
-
-vi.mock("ttag", () => ({
-  "t": vi.fn(() => vi.fn()),
-}));
-
-vi.mock("metabase/utils/dom", () => ({
-  "forceRedraw": vi.fn(() => vi.fn()),
-}));
-
+import { registerDatasetBehavior } from '../support/behavior-contracts';
+import * as LegacyComponent from './LegacyComponent';
 import * as ModernComponent from './ModernComponent';
 
-describe('ModernComponent', () => {
-    it('loads with isolated dependency mocks', () => {
-        expect(Object.keys(ModernComponent).length).toBeGreaterThan(0);
-    });
-});
+registerDatasetBehavior('component-38', LegacyComponent, ModernComponent);

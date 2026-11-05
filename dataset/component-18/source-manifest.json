@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/feature_discovery/feature_discovery.tsx",
+  "sourceSha256": "c5898c279ea44ce50d280d00b1fd7f1aa7a2ad7a0b3c677326901c79f15c42cc",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/feature_discovery/feature_discovery.test.tsx"
+  ]
+}

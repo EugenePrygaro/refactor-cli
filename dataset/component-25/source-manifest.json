@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/license_settings/license_settings.tsx",
+  "sourceSha256": "a525d8de25cf9136ed5ef8104861f721f8de13ff83d61eb86ac139560093c9d8",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/license_settings/license_settings.test.tsx"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/access_control/policy_details/channel_list/channel_list.tsx",
+  "sourceSha256": "b783bfbde10c90a369dce23a6bdaf3fb305afccd191096b76fbbabe65f36afb9",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/access_control/policy_details/channel_list/channel_list.test.tsx"
+  ]
+}

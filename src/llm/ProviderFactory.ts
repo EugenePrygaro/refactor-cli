@@ -12,25 +12,34 @@ function requiredEnvironmentVariable(name: string, providerName: ProviderName): 
     return value;
 }
 
-export function createProvider(providerName?: string): LLMProvider {
+export function createProvider(
+    providerName?: string,
+    modelOverride?: string,
+): LLMProvider {
     const selectedProvider = providerName ?? process.env.ACTIVE_LLM ?? 'gemini';
+    const selectedModel = modelOverride?.trim();
+    if (modelOverride !== undefined && !selectedModel) {
+        throw new Error('Model ID must not be empty.');
+    }
 
     switch (selectedProvider) {
         case 'gemini':
             return new GeminiProvider(
                 requiredEnvironmentVariable('GEMINI_API_KEY', 'gemini'),
+                selectedModel || process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
             );
         case 'openai':
             return new OpenAIProvider(
                 requiredEnvironmentVariable('OPENAI_API_KEY', 'openai'),
-                process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
+                selectedModel || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
                 process.env.OPENAI_BASE_URL?.trim() || undefined,
             );
         case 'ollama':
             return new OpenAIProvider(
                 '',
-                requiredEnvironmentVariable('OLLAMA_MODEL', 'ollama'),
+                selectedModel || requiredEnvironmentVariable('OLLAMA_MODEL', 'ollama'),
                 requiredEnvironmentVariable('OLLAMA_BASE_URL', 'ollama'),
+                'ollama',
             );
         default:
             throw new Error(

@@ -4,20 +4,23 @@ import type {
     RefactoringContext,
     RefactoringResult,
 } from './LLMProvider';
+import { formatJSXDependencyContract } from './LLMProvider';
 
 export class OpenAIProvider implements LLMProvider {
-    readonly name = 'OpenAI-compatible API';
+    readonly name: string;
     private readonly client: OpenAI;
 
     constructor(
         apiKey: string,
-        private readonly modelName: string,
+        readonly modelName: string,
         baseURL?: string,
+        readonly providerName: 'openai' | 'ollama' = 'openai',
     ) {
         this.client = new OpenAI({
             apiKey: apiKey || 'ollama',
             ...(baseURL ? { baseURL } : {}),
         });
+        this.name = `${providerName} (${modelName})`;
     }
 
     async refactorComponent(context: RefactoringContext): Promise<RefactoringResult> {
@@ -61,6 +64,19 @@ export class OpenAIProvider implements LLMProvider {
             sections.push(
                 `Original imports:\n\`\`\`tsx\n${context.imports.join('\n')}\n\`\`\``,
             );
+        }
+
+        if (/\bJSX_MASK_\d+\b/.test(context.originalCode)) {
+            sections.push(
+                'Keep every JSX_MASK_N placeholder exactly unchanged and include each one exactly once in the refactored component.',
+            );
+        }
+
+        const dependencyContract = context.dependencyContract
+            ? formatJSXDependencyContract(context.dependencyContract)
+            : undefined;
+        if (dependencyContract) {
+            sections.push(dependencyContract);
         }
 
         sections.push(

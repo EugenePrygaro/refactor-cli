@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/dashboard/components/DashboardSubscriptionsSidebar/AddEditSidebar/DefaultParametersSection.tsx",
+  "sourceSha256": "e7ca77075f2b273765169538b546fee1788688e2a278930486c8a66025b556e7",
+  "testFiles": [
+    "metabase/frontend/src/metabase/dashboard/components/DashboardSubscriptionsSidebar/AddEditSidebar/DefaultParametersSection.unit.spec.tsx"
+  ]
+}

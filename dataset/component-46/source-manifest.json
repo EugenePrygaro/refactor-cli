@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/database/migrations_table.tsx",
+  "sourceSha256": "994664a4445425b55f3df081cf1e15784e947acd0522a5461b221419e18e3292",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/database/migrations_table.test.tsx"
+  ]
+}

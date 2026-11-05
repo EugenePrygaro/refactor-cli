@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/data_retention_settings/team_list/team_list.tsx",
+  "sourceSha256": "f6919df58744d7221b6364beebbe1b839cb0e083aa5d8995a47a313df9720afa",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/data_retention_settings/team_list/team_list.test.tsx"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/data_grid/data_grid.tsx",
+  "sourceSha256": "781c4e98f9ac763a12d111b9b0ac0f55d2f5750b212a3517c997092465e2d0c6",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/data_grid/data_grid.test.tsx"
+  ]
+}

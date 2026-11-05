@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/manage_tokens_modal/manage_tokens_modal.tsx",
+  "sourceSha256": "bbb865477851f0af540451f261ce0255ea5b562eaab0597696122eebb38a1785",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/manage_tokens_modal/manage_tokens_modal.test.tsx"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/actions_menu/actions_menu.tsx",
+  "sourceSha256": "c898141ff2a6cd62c9f9f5dd6204792db7371e0492b5d5544dd05d7af04c4f4e",
+  "testFiles": [
+    "webapp/channels/src/components/actions_menu/actions_menu.test.tsx"
+  ]
+}

@@ -36,6 +36,12 @@ describe('OpenAIProvider', () => {
         const context: RefactoringContext = {
             originalCode: 'class Counter {}',
             imports: [],
+            dependencyContract: {
+                requiredProps: ['title'],
+                requiredState: ['counter'],
+                requiredMethods: ['handleClick'],
+                unresolvedAccesses: [],
+            },
             errorMessage: 'A previous attempt failed.',
         };
 
@@ -55,6 +61,12 @@ describe('OpenAIProvider', () => {
             ],
             temperature: 0.1,
         });
+        expect(mocks.create.mock.calls[0][0].messages[0].content).toContain(
+            'State variables: `counter`',
+        );
+        expect(mocks.create.mock.calls[0][0].messages[0].content).toContain(
+            'Handlers: `handleClick`',
+        );
         expect(result).toEqual({
             generatedCode: 'export const answer = 42;',
             usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },

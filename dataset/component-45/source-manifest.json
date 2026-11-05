@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/admin_console/save_changes_panel.tsx",
+  "sourceSha256": "42559af6bd1da93715a05b223cac3af204b7a8f2c3327bfcb0bac1342b0c254b",
+  "testFiles": [
+    "webapp/channels/src/components/admin_console/save_changes_panel.test.tsx"
+  ]
+}

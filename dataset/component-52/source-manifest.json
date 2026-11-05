@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/integrations/edit_incoming_webhook/edit_incoming_webhook.tsx",
+  "sourceSha256": "a03199626c234a6338e2043679e8cb1b92483c7a835f263bb7c01e9ff2bf80c8",
+  "testFiles": [
+    "webapp/channels/src/components/integrations/edit_incoming_webhook/edit_incoming_webhook.test.tsx"
+  ]
+}

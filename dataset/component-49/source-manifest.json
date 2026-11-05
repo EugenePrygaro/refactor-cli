@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/auth/components/ForgotPassword/ForgotPassword.tsx",
+  "sourceSha256": "5d888487228c5c1836302518bf0b9582c1657a61c84b629e53d4ef0ef4f75cf4",
+  "testFiles": [
+    "metabase/frontend/src/metabase/auth/components/ForgotPassword/ForgotPassword.unit.spec.tsx"
+  ]
+}

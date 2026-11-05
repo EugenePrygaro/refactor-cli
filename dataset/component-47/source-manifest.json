@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/ui/components/navigation/Tabs/TabsTab.tsx",
+  "sourceSha256": "b26a0a13a8c0c04bfb5265acea5b1717b99b4a5c90091ee9447a134d039b3aa0",
+  "testFiles": [
+    "metabase/frontend/src/metabase/ui/components/navigation/Tabs/TabsTab.unit.spec.tsx"
+  ]
+}

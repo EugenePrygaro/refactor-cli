@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos\\mattermost",
+  "sourceFile": "webapp/channels/src/components/common/radio_group.tsx",
+  "sourceSha256": "12a13135c3e1c52fc8225b8c95293472286be64061c94d12d166bce2ca2793b3",
+  "testFiles": [
+    "webapp/channels/src/components/common/radio_group.test.tsx"
+  ]
+}

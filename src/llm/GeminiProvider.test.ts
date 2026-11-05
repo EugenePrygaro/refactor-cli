@@ -36,6 +36,12 @@ describe('GeminiProvider', () => {
         const result = await provider.refactorComponent({
             originalCode: 'class Counter {}',
             imports: [],
+            dependencyContract: {
+                requiredProps: ['title'],
+                requiredState: ['counter'],
+                requiredMethods: ['handleClick'],
+                unresolvedAccesses: [],
+            },
         });
 
         expect(result).toEqual({
@@ -46,6 +52,26 @@ describe('GeminiProvider', () => {
                 totalTokens: 26,
             },
         });
+        expect(mocks.generateContent).toHaveBeenCalledWith(
+            expect.objectContaining({ model: 'gemini-2.0-flash' }),
+        );
+        expect(mocks.generateContent.mock.calls[0][0].contents).toContain(
+            'Props: `title`',
+        );
+    });
+
+    it('uses the configured model ID', async () => {
+        mocks.generateContent.mockResolvedValue({
+            text: 'export const answer = 42;',
+            usageMetadata: {},
+        });
+        const provider = new GeminiProvider('gemini-token', 'gemini-test-model');
+
+        await provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] });
+
+        expect(mocks.generateContent).toHaveBeenCalledWith(
+            expect.objectContaining({ model: 'gemini-test-model' }),
+        );
     });
 
     it('uses available counts when Gemini omits the total token count', async () => {

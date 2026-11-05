@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/common/components/AccordionList/AccordionList.tsx",
+  "sourceSha256": "ee2b216dd03c888c10f41ee98237da73f31a50bb49b38f5b960bd316ac1a9b0d",
+  "testFiles": [
+    "metabase/frontend/src/metabase/common/components/AccordionList/AccordionList.unit.spec.tsx"
+  ],
+  "archivedTestFiles": [
+    "metabase/frontend/src/metabase/common/components/AccordionList/AccordionList.unit.spec.tsx.reference"
+  ]
+}

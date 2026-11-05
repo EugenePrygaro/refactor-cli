@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/reference/databases/TableList.tsx",
+  "sourceSha256": "ef939db27c86835352e5b562733562da0e3121a7a00def3a14bf1166e1291a84",
+  "testFiles": [
+    "metabase/frontend/src/metabase/reference/databases/TableList.unit.spec.tsx"
+  ]
+}

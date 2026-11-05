@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/common/components/ModalContent/ModalContent.tsx",
+  "sourceSha256": "6c93e6d1537c60a2c6a690246b7579527aecd4f45437ab5b860a4a12b356f3e2",
+  "testFiles": [
+    "metabase/frontend/src/metabase/common/components/ModalContent/ModalContent.unit.spec.tsx"
+  ]
+}

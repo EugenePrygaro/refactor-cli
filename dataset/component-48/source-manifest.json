@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "sourceRoot": "C:\\Users\\priga\\Documents\\myProjects\\source_repos",
+  "sourceFile": "metabase/frontend/src/metabase/metadata/pages/DataModelV1/components/TablePicker/components/TableVisibilityToggle.tsx",
+  "sourceSha256": "cc89e1ab3e2f8094650a1eb85a2e5c7d13cd1f1bfe68c755ea7b8512710e7c3a",
+  "testFiles": [
+    "metabase/frontend/src/metabase/metadata/pages/DataModelV1/components/TablePicker/components/TableVisibilityToggle.unit.spec.tsx"
+  ]
+}

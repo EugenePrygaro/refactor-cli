@@ -4,9 +4,13 @@ import type { CodeMetrics } from '../metrics/calculator';
 import type { FailureStage } from '../pipeline/RefactorPipeline';
 
 export interface CsvReportEntry {
+    runId: string;
+    provider: string;
+    model: string;
     component: string;
     durationMs: number;
     attempts: number;
+    retries: number;
     status: 'Success' | 'Fail';
     promptTokens: number;
     completionTokens: number;
@@ -18,9 +22,13 @@ export interface CsvReportEntry {
 }
 
 const headers = [
+    'run_id',
+    'provider',
+    'model',
     'component',
     'duration_ms',
     'attempts',
+    'api_retries',
     'status',
     'before_cyclomatic_complexity',
     'before_sloc',
@@ -59,9 +67,13 @@ export class CsvReporter {
 
     private serialize(entry: CsvReportEntry): string[] {
         return [
+            entry.runId,
+            entry.provider,
+            entry.model,
             entry.component,
             String(entry.durationMs),
             String(entry.attempts),
+            String(entry.retries),
             entry.status,
             this.metricValue(entry.beforeMetrics?.cyclomaticComplexity),
             this.metricValue(entry.beforeMetrics?.sloc),
