@@ -14,6 +14,7 @@ export class GeminiProvider implements LLMProvider {
     constructor(
         apiKey: string,
         readonly modelName = 'gemini-2.0-flash',
+        readonly seed?: number,
     ) {
         this.ai = new GoogleGenAI({ apiKey });
         this.name = `Gemini (${modelName})`;
@@ -23,7 +24,10 @@ export class GeminiProvider implements LLMProvider {
         const response = await this.ai.models.generateContent({
             model: this.modelName,
             contents: buildPrompt(context),
-            config: { temperature: 0.1 },
+            config: {
+                temperature: 0.1,
+                ...(this.seed === undefined ? {} : { seed: this.seed }),
+            },
         });
         const text = response.text;
         const rawContent = typeof text === 'string' ? text : '';

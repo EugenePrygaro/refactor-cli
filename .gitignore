@@ -3,3 +3,10 @@ dist/
 .env
 .env.*
 !.env.example
+*pycache*/
+*.pyc
+.refactor-cli-selected-*/
+analysis/out/
+results/*/
+!results/tokens/
+!results/coverage/

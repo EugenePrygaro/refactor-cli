@@ -80,6 +80,22 @@ describe('GeminiProvider', () => {
         );
     });
 
+    it('passes the configured seed in the generation config', async () => {
+        mocks.generateContent.mockResolvedValue({
+            text: 'export const answer = 42;',
+            usageMetadata: {},
+        });
+        const provider = new GeminiProvider('gemini-token', 'gemini-test-model', 42);
+
+        await provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] });
+
+        expect(mocks.generateContent).toHaveBeenCalledWith(
+            expect.objectContaining({
+                config: { temperature: 0.1, seed: 42 },
+            }),
+        );
+    });
+
     it('uses available counts when Gemini omits the total token count', async () => {
         mocks.generateContent.mockResolvedValue({
             text: 'export const answer = 42;',

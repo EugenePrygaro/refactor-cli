@@ -15,6 +15,7 @@ export class OpenAIProvider implements LLMProvider {
         readonly modelName: string,
         baseURL?: string,
         readonly providerName: 'openai' | 'ollama' = 'openai',
+        readonly seed?: number,
     ) {
         this.client = new OpenAI({
             apiKey: apiKey || 'ollama',
@@ -28,6 +29,7 @@ export class OpenAIProvider implements LLMProvider {
             model: this.modelName,
             messages: [{ role: 'user', content: buildPrompt(context) }],
             temperature: 0.1,
+            ...(this.seed === undefined ? {} : { seed: this.seed }),
         });
         const content = response.choices[0]?.message.content;
         const rawContent = typeof content === 'string' ? content : '';

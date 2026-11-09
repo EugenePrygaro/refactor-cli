@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -11,6 +12,7 @@ import { AttemptCsvReporter } from './reporting/AttemptCsvReporter';
 import {
     type FailureStage,
     type AttemptRecord,
+    DEFAULT_MAX_ATTEMPTS,
     PipelineError,
     RefactorPipeline,
 } from './pipeline/RefactorPipeline';
@@ -37,6 +39,17 @@ export interface ComponentJob {
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function getGitCommitHash(): string | null {
+    try {
+        return execFileSync('git', ['rev-parse', 'HEAD'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+    } catch {
+        return null;
+    }
 }
 
 function parseSeed(value: string): number {
@@ -193,10 +206,14 @@ export async function runCli(
         `${JSON.stringify(
             {
                 runId,
+                timestamp: new Date().toISOString(),
+                gitCommit: getGitCommitHash(),
                 provider: provider.providerName,
                 model: provider.modelName,
                 modelVersion,
                 seed: options.seed ?? null,
+                temperature: 0.1,
+                maxAttempts: DEFAULT_MAX_ATTEMPTS,
                 ollamaNumCtx:
                     provider.providerName === 'ollama'
                         ? Number(process.env.OLLAMA_NUM_CTX) || 32_768

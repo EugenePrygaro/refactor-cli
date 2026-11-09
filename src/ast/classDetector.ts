@@ -3,6 +3,9 @@ import type {
     ClassBody,
     ClassDeclaration,
     ClassExpression,
+    ClassMethod,
+    ClassProperty,
+    ClassPrivateProperty,
 } from '@babel/types';
 import { parseSource } from './parser';
 
@@ -57,17 +60,37 @@ function isReactComponentSuperclass(
 }
 
 function isRenderMethod(member: ClassBody['body'][number]): boolean {
-    if (
-        member.type !== 'ClassMethod' &&
-        member.type !== 'TSDeclareMethod'
-    ) {
-        return false;
+    if (member.type === 'ClassMethod' || member.type === 'TSDeclareMethod') {
+        return !member.computed && isRenderKey(member.key);
     }
-    if (member.computed) {
-        return false;
+    if (member.type === 'ClassProperty') {
+        return (
+            !member.computed &&
+            isRenderKey(member.key) &&
+            isFunctionValue(member.value)
+        );
     }
+    if (member.type === 'ClassPrivateProperty') {
+        return isRenderKey(member.key) && isFunctionValue(member.value);
+    }
+    return false;
+}
+
+function isRenderKey(
+    key: ClassMethod['key'] | ClassProperty['key'] | ClassPrivateProperty['key'],
+): boolean {
     return (
-        (member.key.type === 'Identifier' && member.key.name === 'render') ||
-        (member.key.type === 'StringLiteral' && member.key.value === 'render')
+        (key.type === 'Identifier' && key.name === 'render') ||
+        (key.type === 'StringLiteral' && key.value === 'render') ||
+        (key.type === 'PrivateName' && key.id.name === 'render')
+    );
+}
+
+function isFunctionValue(
+    value: ClassProperty['value'] | ClassPrivateProperty['value'],
+): boolean {
+    return (
+        value?.type === 'ArrowFunctionExpression' ||
+        value?.type === 'FunctionExpression'
     );
 }

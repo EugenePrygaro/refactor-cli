@@ -259,12 +259,26 @@ describe('runCli', () => {
         );
         const runMetadata = JSON.parse(
             await readFile(path.join(runPath, 'run.json'), 'utf8'),
-        ) as { provider: string; model: string; modelVersion: string | null };
+        ) as {
+            provider: string;
+            model: string;
+            modelVersion: string | null;
+            timestamp: string;
+            gitCommit: string | null;
+            seed: number | null;
+            temperature: number;
+            maxAttempts: number;
+        };
         expect(runMetadata).toMatchObject({
             provider: 'openai',
             model: 'test-model',
             modelVersion: 'test-model-version',
+            seed: null,
+            temperature: 0.1,
+            maxAttempts: 3,
         });
+        expect(Number.isNaN(Date.parse(runMetadata.timestamp))).toBe(false);
+        expect(runMetadata.gitCommit === null || /^[\da-f]{40}$/i.test(runMetadata.gitCommit)).toBe(true);
         await expect(
             readFile(path.join(datasetPath, 'component-01', 'ModernCounter.tsx'), 'utf8'),
         ).rejects.toMatchObject({ code: 'ENOENT' });

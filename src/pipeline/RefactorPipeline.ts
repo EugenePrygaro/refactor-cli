@@ -158,10 +158,12 @@ const defaultVerificationSteps: readonly VerificationStep[] = [
     unitTestVerification,
 ];
 
+export const DEFAULT_MAX_ATTEMPTS = 3;
+
 export class RefactorPipeline {
     constructor(
         private readonly llm: LLMProvider,
-        private readonly maxAttempts = 3,
+        private readonly maxAttempts = DEFAULT_MAX_ATTEMPTS,
         private readonly verificationSteps: readonly VerificationStep[] =
             defaultVerificationSteps,
         private readonly retryOptions: RetryOptions = defaultRetryOptions,

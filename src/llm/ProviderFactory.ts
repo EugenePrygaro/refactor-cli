@@ -29,12 +29,15 @@ export function createProvider(
             return new GeminiProvider(
                 requiredEnvironmentVariable('GEMINI_API_KEY', 'gemini'),
                 selectedModel || process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
+                seed,
             );
         case 'openai':
             return new OpenAIProvider(
                 requiredEnvironmentVariable('OPENAI_API_KEY', 'openai'),
                 selectedModel || process.env.OPENAI_MODEL?.trim() || 'gpt-4o-mini',
                 process.env.OPENAI_BASE_URL?.trim() || undefined,
+                'openai',
+                seed,
             );
         case 'ollama':
             return new OllamaProvider(

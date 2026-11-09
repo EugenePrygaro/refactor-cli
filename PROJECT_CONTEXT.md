@@ -24,7 +24,7 @@ the code sent to the model but also hides the JSX expressions themselves.
 |---|---|
 | `src/index.ts` | CLI arguments, component discovery, sequential job execution, output files, metrics, and CSV reporting |
 | `src/ast/parser.ts` | Shared Babel parser configured for TypeScript and JSX |
-| `src/ast/classDetector.ts` | Detects React class declarations/expressions by superclass and `render` method |
+| `src/ast/classDetector.ts` | Detects React class declarations/expressions by superclass and `render` method or function-valued class property |
 | `src/ast/slicer.ts` | Import/context slicing, JSX masking, dependency-contract extraction, and JSX restoration/adaptation |
 | `src/llm/LLMProvider.ts` | LLM interfaces and token usage types |
 | `src/llm/promptBuilder.ts` | Shared provider prompt and response-cleaning logic |
@@ -136,6 +136,25 @@ The provider factory supports:
 local `.env`; do not commit secrets. Qwen is a model choice, not a separate
 provider implementation.
 
+### Running Qwen in Colab
+
+Start Ollama in the Colab runtime with the context length set to 32768:
+
+```sh
+OLLAMA_CONTEXT_LENGTH=32768 ollama serve
+```
+
+In another cell, pull the model:
+
+```sh
+ollama pull qwen2.5-coder:7b
+```
+
+Set `OLLAMA_BASE_URL` to the reachable Ollama endpoint and
+`OLLAMA_MODEL=qwen2.5-coder:7b`. Record the GPU name in the run notes. Run
+`npm run tokens:count` in Colab with Ollama configured so Qwen token counts are
+included in `results/tokens/prompt-tokens.csv`.
+
 ## 5. End-to-end refactoring flow
 
 ### 5.1 Discover and initialize a job
@@ -147,8 +166,10 @@ named with the corresponding `Modern...` prefix.
 
 The CLI creates a unique run directory under the output root, initializes a
 `RefactorPipeline`, and initializes the component and attempt CSV reporters.
-It writes `run.json` with the run ID, provider, configured model, Ollama model
-digest when the selected provider exposes it, seed, and Ollama context size.
+It writes `run.json` with the ISO timestamp, Git commit hash (or `null`), run
+ID, provider, configured model, Ollama model digest when the selected provider
+exposes it, seed, temperature (`0.1`), maximum attempts (`3`), and Ollama
+context size.
 The response-reported model version for Gemini/OpenAI and the digest for
 Ollama are also recorded on individual `attempts.csv` rows.
 
@@ -235,7 +256,8 @@ guarantee that every required binding was declared correctly.
 The optional `--class-only` switch limits generation to source files containing
 a class declaration or expression that syntactically extends `Component`,
 `PureComponent`, `React.Component`, or `React.PureComponent` and declares a
-`render` method. `report.csv` records the detector result in
+`render` method or a `render` class property whose value is an arrow or regular
+function expression. `report.csv` records the detector result in
 `is_class_component`; a non-matching input receives `Excluded` status and skips
 the LLM and verification pipeline. The default remains off.
 
@@ -326,7 +348,8 @@ the CLI exits with an error if a component failed or the run was stopped.
 Each run directory contains:
 
 - `run.json` — run ID, provider, configured model, Ollama model digest when
-  available, seed, and Ollama context size;
+  available, ISO timestamp, Git commit hash (or `null`), seed, temperature,
+  maximum attempts, and Ollama context size;
 - `report.csv` — one row per selected component, including
   `is_class_component`, status, duration, attempts, API retries, all
   before/after aggregate, per-function, MI, and React migration metrics,
@@ -440,7 +463,8 @@ results:
    runner temporarily substitutes legacy code to test the harness. Run the
    actual CLI with a provider to evaluate generated output.
 8. **The class detector is syntactic, not semantic.** It recognizes only the
-   listed direct superclass spellings and a class method named `render`.
+   listed direct superclass spellings and a `render` method or function-valued
+   class property.
    Aliases such as `class X extends BaseComponent` are not inferred from
    imports. `--class-only` is off by default, so non-class files remain in the
    candidate scope unless explicitly excluded.

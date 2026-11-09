@@ -97,6 +97,21 @@ describe('OpenAIProvider', () => {
         });
     });
 
+    it('passes the configured seed to OpenAI', async () => {
+        mocks.create.mockResolvedValue({
+            choices: [{ message: { content: 'export const answer = 42;' } }],
+            usage: {},
+            model: 'gpt-4o-mini',
+        });
+        const provider = new OpenAIProvider('api-token', 'gpt-4o-mini', undefined, 'openai', 42);
+
+        await provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] });
+
+        expect(mocks.create).toHaveBeenCalledWith(
+            expect.objectContaining({ seed: 42, temperature: 0.1 }),
+        );
+    });
+
     it('removes introductory prose around a model response and records that cleanup', async () => {
         mocks.create.mockResolvedValue({
             choices: [{

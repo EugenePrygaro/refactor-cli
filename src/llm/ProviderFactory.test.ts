@@ -68,6 +68,14 @@ describe('createProvider', () => {
         }
     });
 
+    it('passes a seed to Gemini and OpenAI providers', () => {
+        vi.stubEnv('GEMINI_API_KEY', 'gemini-token');
+        vi.stubEnv('OPENAI_API_KEY', 'openai-token');
+
+        expect(createProvider('gemini', undefined, 73)).toMatchObject({ seed: 73 });
+        expect(createProvider('openai', undefined, 73)).toMatchObject({ seed: 73 });
+    });
+
     it('throws a clear error when a selected provider is missing its key', () => {
         vi.stubEnv('ACTIVE_LLM', 'openai');
         vi.stubEnv('OPENAI_API_KEY', '');
