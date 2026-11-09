@@ -1,7 +1,7 @@
 import { mkdir, open } from 'node:fs/promises';
 import path from 'node:path';
 import type { CodeMetrics } from '../metrics/calculator';
-import type { FailureStage } from '../pipeline/RefactorPipeline';
+import type { AttemptRecord, FailureStage } from '../pipeline/RefactorPipeline';
 
 export interface CsvReportEntry {
     runId: string;
@@ -11,38 +11,65 @@ export interface CsvReportEntry {
     durationMs: number;
     attempts: number;
     retries: number;
-    status: 'Success' | 'Fail';
+    status: 'Success' | 'Fail' | 'Invalid' | 'Excluded';
+    isClassComponent: boolean | null;
     promptTokens: number;
     completionTokens: number;
     totalTokens: number;
     failureStage: FailureStage;
     beforeMetrics?: CodeMetrics;
     afterMetrics?: CodeMetrics;
+    beforeMetricsError?: string;
+    afterMetricsError?: string;
+    attemptRecords?: AttemptRecord[];
     failureReason?: string;
 }
+
+const metricFields: (keyof CodeMetrics)[] = [
+    'cyclomaticComplexity',
+    'miEscomplex',
+    'sloc',
+    'physicalSloc',
+    'halsteadEffort',
+    'halsteadVolume',
+    'functionCount',
+    'cyclomaticAvg',
+    'cyclomaticMax',
+    'halsteadVolumeAvg',
+    'logicalSlocAvg',
+    'miClassic',
+    'miClassicNormalized',
+    'classDeclarations',
+    'thisExpressions',
+    'useStateCalls',
+    'useEffectCalls',
+    'useLayoutEffectCalls',
+    'useCallbackCalls',
+    'useMemoCalls',
+    'useRefCalls',
+    'useContextCalls',
+    'useReducerCalls',
+    'customHookCalls',
+];
 
 const headers = [
     'run_id',
     'provider',
     'model',
     'component',
+    'is_class_component',
     'duration_ms',
     'attempts',
     'api_retries',
     'status',
-    'before_cyclomatic_complexity',
-    'before_sloc',
-    'before_maintainability_index',
-    'after_cyclomatic_complexity',
-    'after_sloc',
-    'after_maintainability_index',
+    ...metricFields.map((field) => `before_${field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`),
+    'before_metrics_error',
+    ...metricFields.map((field) => `after_${field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)}`),
+    'after_metrics_error',
+    'attempt_records',
     'PromptTokens',
     'CompletionTokens',
     'TotalTokens',
-    'HalsteadEffortBefore',
-    'HalsteadEffortAfter',
-    'HalsteadVolumeBefore',
-    'HalsteadVolumeAfter',
     'FailureStage',
     'failure_reason',
 ];
@@ -71,26 +98,28 @@ export class CsvReporter {
             entry.provider,
             entry.model,
             entry.component,
+            entry.isClassComponent === null ? '' : String(entry.isClassComponent),
             String(entry.durationMs),
             String(entry.attempts),
             String(entry.retries),
             entry.status,
-            this.metricValue(entry.beforeMetrics?.cyclomaticComplexity),
-            this.metricValue(entry.beforeMetrics?.sloc),
-            this.metricValue(entry.beforeMetrics?.maintainabilityIndex),
-            this.metricValue(entry.afterMetrics?.cyclomaticComplexity),
-            this.metricValue(entry.afterMetrics?.sloc),
-            this.metricValue(entry.afterMetrics?.maintainabilityIndex),
+            ...this.metricsValues(entry.beforeMetrics),
+            entry.beforeMetricsError ?? '',
+            ...this.metricsValues(entry.afterMetrics),
+            entry.afterMetricsError ?? '',
+            JSON.stringify(entry.attemptRecords ?? []),
             String(entry.promptTokens),
             String(entry.completionTokens),
             String(entry.totalTokens),
-            this.metricValue(entry.beforeMetrics?.halsteadEffort),
-            this.metricValue(entry.afterMetrics?.halsteadEffort),
-            this.metricValue(entry.beforeMetrics?.halsteadVolume),
-            this.metricValue(entry.afterMetrics?.halsteadVolume),
             entry.failureStage,
             entry.failureReason ?? '',
         ].map(escapeCsv);
+    }
+
+    private metricsValues(metrics: CodeMetrics | undefined): string[] {
+        return metricFields.map((field) =>
+            this.metricValue(metrics?.[field]),
+        );
     }
 
     private metricValue(value: number | undefined): string {

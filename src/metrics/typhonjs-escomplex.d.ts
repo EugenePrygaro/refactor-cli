@@ -1,4 +1,18 @@
 declare module 'typhonjs-escomplex' {
+    interface ESComplexMethod {
+        cyclomatic: number;
+        halstead: {
+            volume: number;
+        };
+        sloc: {
+            logical: number;
+        };
+    }
+
+    interface ESComplexClass {
+        methods: ESComplexMethod[];
+    }
+
     interface ESComplexReport {
         aggregate: {
             cyclomatic: number;
@@ -12,6 +26,8 @@ declare module 'typhonjs-escomplex' {
             };
         };
         maintainability: number;
+        methods: ESComplexMethod[];
+        classes: ESComplexClass[];
     }
 
     interface ESComplex {

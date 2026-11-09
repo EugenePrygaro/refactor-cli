@@ -52,9 +52,9 @@ async function main(): Promise<void> {
         }
 
         const source = await readFile(sourcePath, 'utf8');
-        const errors = await runTests(source, generatedPath, testPath);
-        if (errors) {
-            failed.push(`${id}:\n${errors}`);
+        const result = await runTests(source, generatedPath, testPath);
+        if (!result.passed) {
+            failed.push(`${id}:\n${result.errorText}`);
             console.error(`FAIL ${id}`);
         } else {
             console.log(`PASS ${id}`);

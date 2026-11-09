@@ -17,6 +17,7 @@ vi.mock('openai', () => ({
 }));
 
 import { OpenAIProvider } from './OpenAIProvider';
+import { buildPrompt } from './promptBuilder';
 
 describe('OpenAIProvider', () => {
     beforeEach(() => {
@@ -27,6 +28,7 @@ describe('OpenAIProvider', () => {
         mocks.create.mockResolvedValue({
             choices: [{ message: { content: '```tsx\nexport const answer = 42;\n```' } }],
             usage: { prompt_tokens: 12, completion_tokens: 8, total_tokens: 20 },
+            model: 'gpt-4o-mini-2026-10-01',
         });
         const provider = new OpenAIProvider(
             'local-token',
@@ -61,6 +63,9 @@ describe('OpenAIProvider', () => {
             ],
             temperature: 0.1,
         });
+        expect(mocks.create.mock.calls[0][0].messages[0].content).toBe(
+            buildPrompt(context),
+        );
         expect(mocks.create.mock.calls[0][0].messages[0].content).toContain(
             'State variables: `counter`',
         );
@@ -69,11 +74,14 @@ describe('OpenAIProvider', () => {
         );
         expect(result).toEqual({
             generatedCode: 'export const answer = 42;',
+            modelVersion: 'gpt-4o-mini-2026-10-01',
             usage: { promptTokens: 12, completionTokens: 8, totalTokens: 20 },
+            rawResponseLength: 36,
+            formatCleaned: true,
         });
     });
 
-    it('rejects empty model responses instead of returning invalid code', async () => {
+    it('returns empty responses for the pipeline to classify as a format failure', async () => {
         mocks.create.mockResolvedValue({
             choices: [{ message: { content: null } }],
             usage: { prompt_tokens: 4, completion_tokens: 0, total_tokens: 4 },
@@ -82,7 +90,31 @@ describe('OpenAIProvider', () => {
 
         await expect(
             provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] }),
-        ).rejects.toThrow('OpenAI-compatible API returned an empty response.');
+        ).resolves.toMatchObject({
+            generatedCode: '',
+            rawResponseLength: 0,
+            formatCleaned: false,
+        });
+    });
+
+    it('removes introductory prose around a model response and records that cleanup', async () => {
+        mocks.create.mockResolvedValue({
+            choices: [{
+                message: {
+                    content: 'Here is the refactored component:\nexport const answer = 42;',
+                },
+            }],
+            usage: {},
+        });
+        const provider = new OpenAIProvider('api-token', 'gpt-test');
+
+        await expect(
+            provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] }),
+        ).resolves.toMatchObject({
+            generatedCode: 'export const answer = 42;',
+            rawResponseLength: 59,
+            formatCleaned: true,
+        });
     });
 
     it('uses a dummy API key when no key is supplied for a local provider', () => {

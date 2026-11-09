@@ -16,6 +16,7 @@ vi.mock('@google/genai', () => ({
 }));
 
 import { GeminiProvider } from './GeminiProvider';
+import { buildPrompt } from './promptBuilder';
 
 describe('GeminiProvider', () => {
     beforeEach(() => {
@@ -25,6 +26,7 @@ describe('GeminiProvider', () => {
     it('returns cleaned generated code and token usage metadata', async () => {
         mocks.generateContent.mockResolvedValue({
             text: '```tsx\nexport const answer = 42;\n```',
+            modelVersion: 'gemini-2.0-flash-001',
             usageMetadata: {
                 promptTokenCount: 17,
                 candidatesTokenCount: 9,
@@ -33,7 +35,7 @@ describe('GeminiProvider', () => {
         });
         const provider = new GeminiProvider('gemini-token');
 
-        const result = await provider.refactorComponent({
+        const context = {
             originalCode: 'class Counter {}',
             imports: [],
             dependencyContract: {
@@ -42,21 +44,25 @@ describe('GeminiProvider', () => {
                 requiredMethods: ['handleClick'],
                 unresolvedAccesses: [],
             },
-        });
+        };
+        const result = await provider.refactorComponent(context);
 
         expect(result).toEqual({
             generatedCode: 'export const answer = 42;',
+            modelVersion: 'gemini-2.0-flash-001',
             usage: {
                 promptTokens: 17,
                 completionTokens: 9,
                 totalTokens: 26,
             },
+            rawResponseLength: 36,
+            formatCleaned: true,
         });
         expect(mocks.generateContent).toHaveBeenCalledWith(
             expect.objectContaining({ model: 'gemini-2.0-flash' }),
         );
-        expect(mocks.generateContent.mock.calls[0][0].contents).toContain(
-            'Props: `title`',
+        expect(mocks.generateContent.mock.calls[0][0].contents).toBe(
+            buildPrompt(context),
         );
     });
 

@@ -3,11 +3,14 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Command, Option } from 'commander';
+import { isClassComponent } from './ast/classDetector';
 import type { LLMProvider } from './llm/LLMProvider';
 import { createProvider, type ProviderName } from './llm/ProviderFactory';
 import { calculateMetrics, type CodeMetrics } from './metrics/calculator';
+import { AttemptCsvReporter } from './reporting/AttemptCsvReporter';
 import {
     type FailureStage,
+    type AttemptRecord,
     PipelineError,
     RefactorPipeline,
 } from './pipeline/RefactorPipeline';
@@ -17,9 +20,11 @@ export interface CliOptions {
     dataset: string;
     provider: ProviderName;
     model?: string;
+    seed?: number;
     out: string;
     runId?: string;
     components?: string[];
+    classOnly?: boolean;
 }
 
 export interface ComponentJob {
@@ -32,6 +37,14 @@ export interface ComponentJob {
 
 function getErrorMessage(error: unknown): string {
     return error instanceof Error ? error.message : String(error);
+}
+
+function parseSeed(value: string): number {
+    const seed = Number(value);
+    if (!Number.isSafeInteger(seed)) {
+        throw new Error('Seed must be a safe integer.');
+    }
+    return seed;
 }
 
 function sourceFileName(files: string[], componentName: string): string {
@@ -160,7 +173,8 @@ export async function runCli(
     providerOverride?: LLMProvider,
 ): Promise<void> {
     const datasetPath = path.resolve(options.dataset);
-    const provider = providerOverride ?? createProvider(options.provider, options.model);
+    const provider =
+        providerOverride ?? createProvider(options.provider, options.model, options.seed);
     const runId = createRunId(options.runId, provider.providerName, provider.modelName);
     const outputRoot = path.resolve(options.out);
     const outputPath = path.join(outputRoot, runId);
@@ -171,56 +185,117 @@ export async function runCli(
     );
     await mkdir(outputRoot, { recursive: true });
     await mkdir(outputPath);
+    const modelVersion = provider.getModelVersion
+        ? await provider.getModelVersion()
+        : null;
+    await writeFile(
+        path.join(outputPath, 'run.json'),
+        `${JSON.stringify(
+            {
+                runId,
+                provider: provider.providerName,
+                model: provider.modelName,
+                modelVersion,
+                seed: options.seed ?? null,
+                ollamaNumCtx:
+                    provider.providerName === 'ollama'
+                        ? Number(process.env.OLLAMA_NUM_CTX) || 32_768
+                        : null,
+            },
+            null,
+            2,
+        )}\n`,
+        'utf8',
+    );
     const pipeline = new RefactorPipeline(provider);
     const reporter = new CsvReporter(path.join(outputPath, 'report.csv'));
+    const attemptReporter = new AttemptCsvReporter(
+        path.join(outputPath, 'attempts.csv'),
+    );
     let succeeded = 0;
     const failures: string[] = [];
+    let fatalRunError: string | undefined;
 
     for (const job of jobs) {
         console.log(`Refactoring ${job.name}...`);
         const startedAt = performance.now();
         let beforeMetrics: CodeMetrics | undefined;
         let afterMetrics: CodeMetrics | undefined;
+        let beforeMetricsError: string | undefined;
+        let afterMetricsError: string | undefined;
         let attempts = 0;
         let retries = 0;
-        let status: 'Success' | 'Fail' = 'Fail';
+        let status: 'Success' | 'Fail' | 'Invalid' | 'Excluded' = 'Fail';
+        let isClassComponentResult: boolean | null = null;
         let failureReason: string | undefined;
         let failureStage: FailureStage = 'None';
+        let attemptRecords: AttemptRecord[] = [];
         let promptTokens = 0;
         let completionTokens = 0;
         let totalTokens = 0;
 
         try {
             const sourceCode = await readFile(job.sourcePath, 'utf8');
-            beforeMetrics = calculateMetrics(sourceCode);
-            const result = await pipeline.runWithAttempts(
-                job.sourcePath,
-                job.generatedPath,
-                job.testPath,
-            );
-            attempts = result.attempts;
-            retries = result.retries;
-            promptTokens = result.usage.promptTokens;
-            completionTokens = result.usage.completionTokens;
-            totalTokens = result.usage.totalTokens;
-            failureStage = result.failureStage;
-            afterMetrics = calculateMetrics(result.generatedCode);
-            await mkdir(path.dirname(job.outputPath), { recursive: true });
-            await writeFile(job.outputPath, result.generatedCode, 'utf8');
-            succeeded++;
-            status = 'Success';
-            console.log(`Output written to ${job.outputPath}`);
+            isClassComponentResult = isClassComponent(sourceCode);
+            const metricsResult = await calculateMetrics(sourceCode);
+            if (metricsResult.ok) {
+                beforeMetrics = metricsResult.metrics;
+            } else {
+                beforeMetricsError = metricsResult.error;
+            }
         } catch (error: unknown) {
-            const message = `${job.name}: ${getErrorMessage(error)}`;
-            failures.push(message);
-            failureReason = getErrorMessage(error);
-            if (error instanceof PipelineError) {
-                attempts = error.attempts;
-                retries = error.retries;
-                promptTokens = error.usage.promptTokens;
-                completionTokens = error.usage.completionTokens;
-                totalTokens = error.usage.totalTokens;
-                failureStage = error.failureStage;
+            beforeMetricsError = getErrorMessage(error);
+        }
+
+        if (options.classOnly && isClassComponentResult === false) {
+            status = 'Excluded';
+            console.log(`Excluded ${job.name}: not a React class component.`);
+        } else {
+            try {
+                const result = await pipeline.runWithAttempts(
+                    job.sourcePath,
+                    job.generatedPath,
+                    job.testPath,
+                );
+                attempts = result.attemptCount;
+                attemptRecords = result.attempts;
+                retries = result.retries;
+                promptTokens = result.usage.promptTokens;
+                completionTokens = result.usage.completionTokens;
+                totalTokens = result.usage.totalTokens;
+                failureStage = result.failureStage;
+                await mkdir(path.dirname(job.outputPath), { recursive: true });
+                await writeFile(job.outputPath, result.generatedCode, 'utf8');
+                succeeded++;
+                status = 'Success';
+                console.log(`Output written to ${job.outputPath}`);
+                try {
+                    const metricsResult = await calculateMetrics(result.generatedCode);
+                    if (metricsResult.ok) {
+                        afterMetrics = metricsResult.metrics;
+                    } else {
+                        afterMetricsError = metricsResult.error;
+                    }
+                } catch (error: unknown) {
+                    afterMetricsError = getErrorMessage(error);
+                }
+            } catch (error: unknown) {
+                const message = `${job.name}: ${getErrorMessage(error)}`;
+                failures.push(message);
+                failureReason = getErrorMessage(error);
+                if (error instanceof PipelineError) {
+                    attempts = error.attemptCount;
+                    attemptRecords = error.attempts;
+                    retries = error.retries;
+                    promptTokens = error.usage.promptTokens;
+                    completionTokens = error.usage.completionTokens;
+                    totalTokens = error.usage.totalTokens;
+                    failureStage = error.failureStage;
+                    status = error.componentStatus;
+                    if (error.fatal) {
+                        fatalRunError = getErrorMessage(error);
+                    }
+                }
             }
         }
 
@@ -229,6 +304,7 @@ export async function runCli(
             provider: provider.providerName,
             model: provider.modelName,
             component: job.name,
+            isClassComponent: isClassComponentResult,
             durationMs: Math.round(performance.now() - startedAt),
             attempts,
             retries,
@@ -239,16 +315,30 @@ export async function runCli(
             failureStage,
             beforeMetrics,
             afterMetrics,
+            beforeMetricsError,
+            afterMetricsError,
+            attemptRecords,
             failureReason,
         });
+        await attemptReporter.appendAttempts(
+            job.name,
+            provider.modelName,
+            attemptRecords,
+        );
 
         if (failureReason) {
             console.error(`${job.name}: ${failureReason}`);
+        }
+        if (fatalRunError) {
+            break;
         }
     }
 
     console.log(`Completed: ${succeeded}/${jobs.length} components succeeded.`);
     console.log(`CSV report written to ${path.join(outputPath, 'report.csv')}`);
+    if (fatalRunError) {
+        throw new Error(fatalRunError);
+    }
     if (failures.length > 0) {
         throw new Error(`${failures.length} component(s) failed.`);
     }
@@ -265,6 +355,8 @@ program
             .default(process.env.ACTIVE_LLM ?? 'gemini'),
     )
     .option('-m, --model <model>', 'Model ID (overrides the provider-specific environment variable)')
+    .option('--seed <seed>', 'Random seed for providers that support it', parseSeed)
+    .option('--class-only', 'Refactor only React class components')
     .option('-o, --out <path>', 'Output root directory', './results')
     .option(
         '--components <ids>',

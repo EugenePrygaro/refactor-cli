@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LLMProvider } from './llm/LLMProvider';
+import { calculateMetrics } from './metrics/calculator';
 import {
     createRunId,
     discoverComponentJobs,
@@ -10,10 +11,33 @@ import {
     runCli,
 } from './index';
 
+const metricMocks = vi.hoisted(() => ({
+    calculateMetrics: vi.fn(),
+    originalCalculateMetrics: undefined as
+        | ((sourceCode: string) => Promise<unknown>)
+        | undefined,
+}));
+
+vi.mock('./metrics/calculator', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('./metrics/calculator')>();
+    metricMocks.originalCalculateMetrics = actual.calculateMetrics;
+    metricMocks.calculateMetrics.mockImplementation(actual.calculateMetrics);
+    return {
+        ...actual,
+        calculateMetrics: metricMocks.calculateMetrics,
+    };
+});
+
 const temporaryDirectories: string[] = [];
 
 afterEach(async () => {
     vi.restoreAllMocks();
+    metricMocks.calculateMetrics.mockReset();
+    if (metricMocks.originalCalculateMetrics) {
+        metricMocks.calculateMetrics.mockImplementation((sourceCode: string) =>
+            metricMocks.originalCalculateMetrics!(sourceCode),
+        );
+    }
     await Promise.all(
         temporaryDirectories.splice(0).map((directory) =>
             rm(directory, { recursive: true, force: true }),
@@ -199,9 +223,13 @@ describe('runCli', () => {
             name: 'test',
             providerName: 'openai',
             modelName: 'test-model',
+            async getModelVersion() {
+                return 'test-model-version';
+            },
             async refactorComponent() {
                 return {
                     generatedCode: 'export const answer = 42;',
+                    modelVersion: 'test-model-version',
                     usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
                 };
             },
@@ -222,9 +250,69 @@ describe('runCli', () => {
         expect(report).toContain('component-01');
         expect(report).toContain(',Success,');
         expect(report).toContain(',10,5,15,');
+        const attempts = await readFile(path.join(runPath, 'attempts.csv'), 'utf8');
+        expect(attempts).toContain(
+            'component,model,attempt,stage_reached,failure_stage',
+        );
+        expect(attempts).toContain(
+            'component-01,test-model,1,Test,None,,,0,test-model-version,false,10,5,15',
+        );
+        const runMetadata = JSON.parse(
+            await readFile(path.join(runPath, 'run.json'), 'utf8'),
+        ) as { provider: string; model: string; modelVersion: string | null };
+        expect(runMetadata).toMatchObject({
+            provider: 'openai',
+            model: 'test-model',
+            modelVersion: 'test-model-version',
+        });
         await expect(
             readFile(path.join(datasetPath, 'component-01', 'ModernCounter.tsx'), 'utf8'),
         ).rejects.toMatchObject({ code: 'ENOENT' });
+    }, 30_000);
+
+    it('keeps Success and saves the candidate when before and after metrics fail', async () => {
+        const root = await mkdtemp(path.join(process.cwd(), '.refactor-cli-metrics-failure-'));
+        temporaryDirectories.push(root);
+        const { datasetPath, outputPath } = await createCliFixture(root);
+        const provider: LLMProvider = {
+            name: 'test',
+            providerName: 'openai',
+            modelName: 'test-model',
+            async refactorComponent() {
+                return {
+                    generatedCode: 'export const answer = 42;',
+                    usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+                };
+            },
+        };
+        vi.mocked(calculateMetrics).mockResolvedValue({
+            ok: false,
+            error: 'simulated metrics failure',
+        });
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await runCli(
+            { dataset: datasetPath, out: outputPath, provider: 'openai', runId: 'metrics-run' },
+            provider,
+        );
+
+        const runPath = path.join(outputPath, 'metrics-run');
+        await expect(
+            readFile(path.join(runPath, 'component-01', 'ModernCounter.tsx'), 'utf8'),
+        ).resolves.toBe('export const answer = 42;');
+        const report = await readFile(path.join(runPath, 'report.csv'), 'utf8');
+        const [headerLine, resultLine] = report.trimEnd().split('\n');
+        const headers = headerLine.split(',');
+        const values = resultLine.split(',');
+
+        expect(values[headers.indexOf('status')]).toBe('Success');
+        expect(values[headers.indexOf('before_metrics_error')]).toBe(
+            'simulated metrics failure',
+        );
+        expect(values[headers.indexOf('after_metrics_error')]).toBe(
+            'simulated metrics failure',
+        );
     }, 30_000);
 
     it('runs only the selected components', async () => {
@@ -246,6 +334,7 @@ describe('runCli', () => {
                 it('checks the selected generated module', () => {
                     expect(answer).toBe(7);
                 });
+
             `,
         );
         const refactorComponent = vi.fn(async () => ({
@@ -285,6 +374,47 @@ describe('runCli', () => {
         expect(report).not.toContain('component-01');
     }, 30_000);
 
+    it('excludes non-class components in class-only mode without calling the model', async () => {
+        const root = await mkdtemp(path.join(process.cwd(), '.refactor-cli-class-only-'));
+        temporaryDirectories.push(root);
+        const { datasetPath, outputPath } = await createCliFixture(root);
+        const refactorComponent = vi.fn(async () => ({
+            generatedCode: 'export const answer = 42;',
+            usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+        }));
+        const provider: LLMProvider = {
+            name: 'test',
+            providerName: 'openai',
+            modelName: 'test-model',
+            refactorComponent,
+        };
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await runCli(
+            {
+                dataset: datasetPath,
+                out: outputPath,
+                provider: 'openai',
+                runId: 'class-only',
+                classOnly: true,
+            },
+            provider,
+        );
+
+        expect(refactorComponent).not.toHaveBeenCalled();
+        const report = await readFile(
+            path.join(outputPath, 'class-only', 'report.csv'),
+            'utf8',
+        );
+        const [headerLine, resultLine] = report.trimEnd().split('\n');
+        const headers = headerLine.split(',');
+        const values = resultLine.split(',');
+        expect(values[headers.indexOf('status')]).toBe('Excluded');
+        expect(values[headers.indexOf('is_class_component')]).toBe('false');
+        expect(values[headers.indexOf('attempts')]).toBe('0');
+    }, 30_000);
+
     it('records a provider failure and rejects the run after writing its report', async () => {
         const root = await mkdtemp(path.join(process.cwd(), '.refactor-cli-failure-'));
         temporaryDirectories.push(root);
@@ -314,5 +444,49 @@ describe('runCli', () => {
         await expect(
             readFile(path.join(runPath, 'component-01', 'ModernCounter.tsx'), 'utf8'),
         ).rejects.toMatchObject({ code: 'ENOENT' });
+    });
+
+    it('stops the overall run on a fatal provider configuration error', async () => {
+        const root = await mkdtemp(path.join(os.tmpdir(), 'refactor-cli-fatal-'));
+        temporaryDirectories.push(root);
+        const { datasetPath, outputPath } = await createCliFixture(root);
+        const secondComponent = path.join(datasetPath, 'component-02');
+        await mkdir(secondComponent);
+        await writeFile(
+            path.join(secondComponent, 'LegacyCounter.tsx'),
+            'export class LegacyCounter {}',
+        );
+        await writeFile(
+            path.join(secondComponent, 'ModernCounter.test.tsx'),
+            `import { it } from 'vitest'; it('exists', () => {});`,
+        );
+        const refactorComponent = vi.fn(async () => {
+            throw Object.assign(new Error('The requested model was not found.'), {
+                status: 404,
+            });
+        });
+        const provider: LLMProvider = {
+            name: 'test',
+            providerName: 'openai',
+            modelName: 'missing-model',
+            refactorComponent,
+        };
+        vi.spyOn(console, 'log').mockImplementation(() => undefined);
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        await expect(
+            runCli(
+                { dataset: datasetPath, out: outputPath, provider: 'openai', runId: 'fatal-run' },
+                provider,
+            ),
+        ).rejects.toThrow('Fatal LLM configuration error');
+
+        expect(refactorComponent).toHaveBeenCalledOnce();
+        const report = await readFile(
+            path.join(outputPath, 'fatal-run', 'report.csv'),
+            'utf8',
+        );
+        expect(report).toContain(',Fail,');
+        expect(report.trimEnd().split('\n')).toHaveLength(2);
     });
 });

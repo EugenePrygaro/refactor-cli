@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { GeminiProvider } from './GeminiProvider';
+import { OllamaProvider } from './OllamaProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 import { createProvider } from './ProviderFactory';
 
@@ -22,7 +23,9 @@ describe('createProvider', () => {
 
         expect(createProvider('gemini', 'gemini-latest').modelName).toBe('gemini-latest');
         expect(createProvider('openai', 'gpt-custom').modelName).toBe('gpt-custom');
-        expect(createProvider('ollama', 'qwen-custom').modelName).toBe('qwen-custom');
+        const ollama = createProvider('ollama', 'qwen-custom');
+        expect(ollama).toBeInstanceOf(OllamaProvider);
+        expect(ollama.modelName).toBe('qwen-custom');
     });
 
     it('uses the Gemini model environment variable when no override is given', () => {
@@ -43,12 +46,26 @@ describe('createProvider', () => {
         expect(createProvider()).toBeInstanceOf(OpenAIProvider);
     });
 
-    it('creates Ollama using its model and base URL without requiring a key', () => {
+    it('creates native Ollama provider using its model and base URL without requiring a key', () => {
         vi.stubEnv('ACTIVE_LLM', 'ollama');
         vi.stubEnv('OLLAMA_MODEL', 'qwen2.5-coder:7b');
         vi.stubEnv('OLLAMA_BASE_URL', 'http://localhost:11434/v1');
 
-        expect(createProvider()).toBeInstanceOf(OpenAIProvider);
+        expect(createProvider()).toBeInstanceOf(OllamaProvider);
+    });
+
+    it('passes the seed and configured context window to the Ollama provider', () => {
+        vi.stubEnv('OLLAMA_MODEL', 'qwen2.5-coder:14b');
+        vi.stubEnv('OLLAMA_BASE_URL', 'https://colab.example/tunnel');
+        vi.stubEnv('OLLAMA_NUM_CTX', '65536');
+
+        const provider = createProvider('ollama', undefined, 73);
+
+        expect(provider).toBeInstanceOf(OllamaProvider);
+        if (provider instanceof OllamaProvider) {
+            expect(provider.numCtx).toBe(65_536);
+            expect(provider.seed).toBe(73);
+        }
     });
 
     it('throws a clear error when a selected provider is missing its key', () => {

@@ -1,5 +1,6 @@
 import type { LLMProvider } from './LLMProvider';
 import { GeminiProvider } from './GeminiProvider';
+import { OllamaProvider } from './OllamaProvider';
 import { OpenAIProvider } from './OpenAIProvider';
 
 export type ProviderName = 'gemini' | 'openai' | 'ollama';
@@ -15,6 +16,7 @@ function requiredEnvironmentVariable(name: string, providerName: ProviderName): 
 export function createProvider(
     providerName?: string,
     modelOverride?: string,
+    seed?: number,
 ): LLMProvider {
     const selectedProvider = providerName ?? process.env.ACTIVE_LLM ?? 'gemini';
     const selectedModel = modelOverride?.trim();
@@ -35,11 +37,11 @@ export function createProvider(
                 process.env.OPENAI_BASE_URL?.trim() || undefined,
             );
         case 'ollama':
-            return new OpenAIProvider(
-                '',
-                selectedModel || requiredEnvironmentVariable('OLLAMA_MODEL', 'ollama'),
+            return new OllamaProvider(
                 requiredEnvironmentVariable('OLLAMA_BASE_URL', 'ollama'),
-                'ollama',
+                selectedModel || requiredEnvironmentVariable('OLLAMA_MODEL', 'ollama'),
+                undefined,
+                seed,
             );
         default:
             throw new Error(
