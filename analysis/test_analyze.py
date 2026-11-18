@@ -11,6 +11,7 @@ from analyze import (
     build_rq3,
     build_rq4,
     load_runs,
+    merge_runs,
     prepare_data,
 )
 
@@ -102,6 +103,65 @@ class AnalysisTests(unittest.TestCase):
             ]
         )
 
+    def _with_rerun(self, rerun_component: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+        reports = pd.concat(
+            [
+                self.reports,
+                pd.DataFrame(
+                    [
+                        {
+                            "run_id": "run-b",
+                            "model": "qwen",
+                            "component": rerun_component,
+                            "status": "Success",
+                            "attempts": 2,
+                        }
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        reports["status"] = reports["status"].str.lower()
+        attempts = pd.concat(
+            [
+                self.attempts,
+                pd.DataFrame(
+                    [
+                        {"run_id": "run-a", "model": "qwen", "component": "component-03",
+                         "attempt": 1, "failure_stage": "Infrastructure",
+                         "error_category": "infrastructure"},
+                        {"run_id": "run-b", "model": "qwen", "component": rerun_component,
+                         "attempt": 1, "failure_stage": "Test",
+                         "error_category": "test_assertion"},
+                        {"run_id": "run-b", "model": "qwen", "component": rerun_component,
+                         "attempt": 2, "failure_stage": "None", "error_category": ""},
+                    ]
+                ),
+            ],
+            ignore_index=True,
+        )
+        return reports, attempts
+
+    def test_merge_runs_treats_a_rerun_of_invalid_components_as_one_run(self) -> None:
+        reports, attempts = self._with_rerun("component-03")
+
+        merged_reports, merged_attempts = merge_runs(reports, attempts)
+
+        self.assertEqual(set(merged_reports["run_id"]), {"run-a+run-b"})
+        self.assertNotIn("Infrastructure", merged_attempts["failure_stage"].tolist())
+        _, _, successes = prepare_data(merged_reports, merged_attempts)
+        summary, _ = build_rq1(successes)
+        rates = dict(zip(summary["attempt"], summary["success_rate_mean"]))
+        self.assertAlmostEqual(rates[1], 1 / 3)
+        self.assertEqual(rates[2], 1.0)
+        self.assertTrue(summary["runs_n"].eq(1).all())
+
+    def test_merge_runs_rejects_a_component_evaluated_twice(self) -> None:
+        reports, attempts = self._with_rerun("component-01")
+
+        with self.assertRaises(ValueError):
+            merge_runs(reports, attempts)
+
     def test_excluded_statuses_do_not_affect_success_rates(self) -> None:
         reports, attempts, successes = prepare_data(self.reports, self.attempts)
         summary, _ = build_rq1(successes)
@@ -150,6 +210,22 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(token_summary.loc[0, "eta_mean"], 0.5)
         self.assertEqual(histogram.loc[0, "success_attempt"], 1)
 
+        with tempfile.TemporaryDirectory() as directory:
+            tokens = Path(directory) / "prompt-tokens.csv"
+            pd.DataFrame(
+                [
+                    {"component": "component-01", "model": "qwen", "eta": 0.25},
+                    {"component": "component-02", "model": "qwen", "eta": 0.75},
+                    {"component": "component-99", "model": "qwen", "eta": 0.95},
+                ]
+            ).to_csv(tokens, index=False)
+            _, class_only_summary, _ = build_rq3(
+                attempts, successes, tokens, {"component-01", "component-02"}
+            )
+        eta_row = class_only_summary.loc[class_only_summary["model"] == "qwen"].iloc[0]
+        self.assertEqual(eta_row["eta_mean"], 0.5)
+        self.assertEqual(eta_row["eta_n"], 2)
+
         model_summary, errors = build_rq4(reports, attempts)
         self.assertEqual(model_summary.loc[0, "final_success_rate"], 1.0)
         self.assertIn("test_assertion", errors["error_category"].tolist())
@@ -194,6 +270,10 @@ class AnalysisTests(unittest.TestCase):
         self.assertEqual(reports.loc[0, "model"], "qwen2.5-coder:14b")
         self.assertEqual(reports.loc[0, "run_id"], "run-a")
         self.assertEqual(attempts.loc[0, "total_tokens"], 15)
+        # "None" marks a successful attempt and must survive CSV loading.
+        self.assertEqual(attempts.loc[0, "failure_stage"], "None")
+        _, _, success_attempts = prepare_data(reports, attempts)
+        self.assertEqual(success_attempts.loc[0, "success_attempt"], 1)
 
 
 if __name__ == "__main__":

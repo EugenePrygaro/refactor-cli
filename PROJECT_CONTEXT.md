@@ -116,6 +116,7 @@ npm run test:reference -- <component-directory> [candidate-component-file]
 | `--components <ids>` | Comma-separated component IDs, e.g. `component-06,component-51` | All discovered components |
 | `--class-only` | Exclude inputs that do not match the React class-component detector; excluded rows are recorded without calling the model | Off |
 | `--run-id <id>` | Explicit run directory name | Generated from provider, model, time, and a random suffix |
+| `--request-interval <seconds>` | Minimum time between the starts of two model requests; use `12` for a 5-requests-per-minute free tier. Recorded as `requestIntervalMs` in `run.json` | `0` |
 
 Example:
 
@@ -307,9 +308,17 @@ restoration or a verification step fails, the error is added to the LLM context
 and a new generation attempt begins with the same masked source and dependency
 contract.
 
-Transient provider/network failures have a separate retry mechanism. By
-default, up to three retries are made with exponential backoff, capped at
-30 seconds. These API retries are counted separately from generation attempts.
+Transient provider/network failures (HTTP 429, 5xx, connection errors and
+timeouts, including the Gemini client's 5-minute request timeout, which the SDK also sends to the server as X-Server-Timeout) have a
+separate retry mechanism. By default, up to three retries are made. When the
+server says how long to wait (Gemini's `retryDelay` / "retry in N s", or a
+`Retry-After` header) the pipeline waits that long plus one second, capped at
+two minutes; otherwise it backs off for 15, 30 and 60 seconds. These API
+retries are counted separately from generation attempts. If every retry fails,
+the model never answered, so the attempt is recorded as an `Infrastructure`
+failure (`errorCategory` `infrastructure`) and the component is reported as
+`Invalid` without spending the remaining generation attempts; the analysis
+excludes `Invalid` rows, and the component can be re-run with `--components`.
 Non-transient provider errors (including HTTP 400/context-size errors) are
 recorded as failed generation attempts and can be followed by another
 generation attempt. Empty or non-code responses are recorded as `Format`
@@ -415,6 +424,21 @@ Explicit run folders and alternate paths can be supplied:
 python analysis/analyze.py results/<run-id-1> results/<run-id-2>
 python analysis/analyze.py --results-root path/to/results --tokens path/to/prompt-tokens.csv --out analysis/out
 ```
+
+Each run directory is treated as a separate repetition: RQ1 computes success
+rates per run and reports their mean ± SD. When a second directory only
+re-runs the `Invalid` components of a main run, pass `--merge-runs` so the
+directories of each model are combined into one run (attempts from rows that
+were `Invalid` are dropped; a component evaluated in two directories is an
+error):
+
+```sh
+python analysis/analyze.py results/gemini-full results/gemini-full-rerun --merge-runs
+```
+
+Reading CSVs keeps the literal `None` failure stage (pandas would otherwise
+read it as missing and hide successful attempts), and η is averaged only over
+components the runs identified as class components.
 
 `analysis/out/` receives CSV tables and PNG plots:
 

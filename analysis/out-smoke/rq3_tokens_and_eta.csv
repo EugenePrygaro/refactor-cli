@@ -1,0 +1,3 @@
+model,components_n,tokens_mean,tokens_median,eta_mean,eta_median,eta_n
+gemini-3.8-flash,1.0,18567.0,18567.0,,,
+gpt-4o-mini,,,,0.0853403141361256,0.0853403141361256,1.0

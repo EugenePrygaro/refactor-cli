@@ -15,7 +15,11 @@ vi.mock('@google/genai', () => ({
     },
 }));
 
-import { GeminiProvider } from './GeminiProvider';
+import {
+    GEMINI_REQUEST_TIMEOUT_MS,
+    GeminiProvider,
+    GeminiRequestTimeoutError,
+} from './GeminiProvider';
 import { buildPrompt } from './promptBuilder';
 
 describe('GeminiProvider', () => {
@@ -59,7 +63,7 @@ describe('GeminiProvider', () => {
             formatCleaned: true,
         });
         expect(mocks.generateContent).toHaveBeenCalledWith(
-            expect.objectContaining({ model: 'gemini-2.0-flash' }),
+            expect.objectContaining({ model: 'gemini-3.8-flash' }),
         );
         expect(mocks.generateContent.mock.calls[0][0].contents).toBe(
             buildPrompt(context),
@@ -116,5 +120,39 @@ describe('GeminiProvider', () => {
             completionTokens: 3,
             totalTokens: 10,
         });
+    });
+
+    it('configures a per-request HTTP timeout', () => {
+        new GeminiProvider('gemini-token');
+
+        expect(mocks.constructor).toHaveBeenCalledWith({
+            apiKey: 'gemini-token',
+            httpOptions: { timeout: GEMINI_REQUEST_TIMEOUT_MS },
+        });
+    });
+
+    it('reports an aborted request as a retryable connection timeout', async () => {
+        const abort = Object.assign(new Error('This operation was aborted'), {
+            name: 'AbortError',
+        });
+        mocks.generateContent.mockRejectedValue(abort);
+        const provider = new GeminiProvider('gemini-token');
+
+        const error = await provider
+            .refactorComponent({ originalCode: 'class Counter {}', imports: [] })
+            .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(GeminiRequestTimeoutError);
+        expect(error).toMatchObject({ name: 'APIConnectionTimeoutError', cause: abort });
+    });
+
+    it('passes other provider errors through unchanged', async () => {
+        const quota = Object.assign(new Error('quota'), { status: 429 });
+        mocks.generateContent.mockRejectedValue(quota);
+        const provider = new GeminiProvider('gemini-token');
+
+        await expect(
+            provider.refactorComponent({ originalCode: 'class Counter {}', imports: [] }),
+        ).rejects.toBe(quota);
     });
 });

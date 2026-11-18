@@ -1,0 +1,7 @@
+model,metric,before_mean,after_mean,before_median,after_median,wilcoxon_p_value,n
+gemini-3.8-flash,CC,36.0,34.0,36.0,34.0,1.0,1
+gemini-3.8-flash,Logical SLOC,118.0,120.0,118.0,120.0,1.0,1
+gemini-3.8-flash,Halstead volume,4445.123,3270.704,4445.123,3270.704,1.0,1
+gemini-3.8-flash,Halstead effort,169777.818,97549.554,169777.818,97549.554,1.0,1
+gemini-3.8-flash,MI classic,117.8355916947695,114.46452327437264,117.8355916947695,114.46452327437264,1.0,1
+gemini-3.8-flash,MI escomplex,110.719,110.226,110.719,110.226,1.0,1

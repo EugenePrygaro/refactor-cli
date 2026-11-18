@@ -1,0 +1,4 @@
+model,attempt,success_rate_mean,success_rate_sd,runs_n,success_rate_mean_sd
+gemini-3.8-flash,1,0.0,0.0,1,0.0000 ± 0.0000
+gemini-3.8-flash,2,1.0,0.0,1,1.0000 ± 0.0000
+gemini-3.8-flash,3,1.0,0.0,1,1.0000 ± 0.0000

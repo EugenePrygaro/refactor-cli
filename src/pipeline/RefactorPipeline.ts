@@ -87,12 +87,23 @@ export type FailureStage =
 export interface RetryOptions {
     maxRetries: number;
     baseDelayMs: number;
+    /** Upper bound for one exponential backoff pause (default 60 s). */
+    maxDelayMs?: number;
+    /** Minimum time between the starts of two model requests, for per-minute rate limits (default 0). */
+    minRequestIntervalMs?: number;
     sleep: (milliseconds: number) => Promise<void>;
+    now?: () => number;
 }
 
-const defaultRetryOptions: RetryOptions = {
+/** Longest pause accepted from a server's "retry in N s" hint. */
+const MAX_SERVER_RETRY_DELAY_MS = 120_000;
+
+export const DEFAULT_RETRY_OPTIONS: RetryOptions = {
     maxRetries: 3,
-    baseDelayMs: 1_000,
+    // Overload (503) and quota (429) errors need tens of seconds, not milliseconds, to clear.
+    baseDelayMs: 15_000,
+    maxDelayMs: 60_000,
+    minRequestIntervalMs: 0,
     sleep: (milliseconds) =>
         new Promise((resolve) => setTimeout(resolve, milliseconds)),
 };
@@ -161,12 +172,14 @@ const defaultVerificationSteps: readonly VerificationStep[] = [
 export const DEFAULT_MAX_ATTEMPTS = 3;
 
 export class RefactorPipeline {
+    private lastRequestStartedAt: number | undefined;
+
     constructor(
         private readonly llm: LLMProvider,
         private readonly maxAttempts = DEFAULT_MAX_ATTEMPTS,
         private readonly verificationSteps: readonly VerificationStep[] =
             defaultVerificationSteps,
-        private readonly retryOptions: RetryOptions = defaultRetryOptions,
+        private readonly retryOptions: RetryOptions = DEFAULT_RETRY_OPTIONS,
         private readonly feedbackErrorMaxChars = 4_000,
     ) {
         if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
@@ -179,7 +192,9 @@ export class RefactorPipeline {
             !Number.isInteger(retryOptions.maxRetries) ||
             retryOptions.maxRetries < 0 ||
             !Number.isFinite(retryOptions.baseDelayMs) ||
-            retryOptions.baseDelayMs < 0
+            retryOptions.baseDelayMs < 0 ||
+            !isNonNegativeOrUnset(retryOptions.maxDelayMs) ||
+            !isNonNegativeOrUnset(retryOptions.minRequestIntervalMs)
         ) {
             throw new RangeError('Retry settings must be non-negative.');
         }
@@ -238,6 +253,8 @@ export class RefactorPipeline {
             record.modelVersion = knownModelVersion;
             let result: Awaited<ReturnType<LLMProvider['refactorComponent']>>;
             let attemptErrorFull = '';
+            // Rate-limit pacing happens before the clock starts so it does not inflate latency.
+            await this.waitForRequestSlot();
             const modelCallStarted = performance.now();
             try {
                 result = await this.refactorWithRetries(context, () => {
@@ -247,6 +264,24 @@ export class RefactorPipeline {
             } catch (error: unknown) {
                 record.latencyMs = elapsed(modelCallStarted);
                 const message = getErrorMessage(error);
+                if (isTransientModelError(error)) {
+                    // The model never answered: an outage, not a model failure. Do not spend
+                    // the attempt; mark the component Invalid so analysis excludes it and it
+                    // can be re-run.
+                    const outage =
+                        `Model API unavailable after ${record.apiRetries} retries: ${message}`;
+                    setAttemptFailure(record, 'Infrastructure', outage, 'infrastructure');
+                    skipStagesAfter(record, 'Generation');
+                    attemptRecords.push(record);
+                    throw new PipelineError(
+                        outage,
+                        attemptRecords,
+                        retries,
+                        { ...totalUsage },
+                        'Infrastructure',
+                        'Invalid',
+                    );
+                }
                 const fatal = isFatalConfigurationError(error);
                 const feedback = fatal
                     ? `Fatal provider configuration error: ${message}`
@@ -476,6 +511,9 @@ export class RefactorPipeline {
         onRetry: () => void,
     ): Promise<Awaited<ReturnType<LLMProvider['refactorComponent']>>> {
         for (let retry = 0; ; retry++) {
+            if (retry > 0) {
+                await this.waitForRequestSlot();
+            }
             try {
                 return await this.llm.refactorComponent(context);
             } catch (error: unknown) {
@@ -483,14 +521,61 @@ export class RefactorPipeline {
                     throw error;
                 }
                 onRetry();
-                const delay = Math.min(
-                    this.retryOptions.baseDelayMs * 2 ** retry,
-                    30_000,
-                );
-                await this.retryOptions.sleep(delay);
+                await this.retryOptions.sleep(retryDelayMs(error, retry, this.retryOptions));
             }
         }
     }
+
+    /** Waits until at least minRequestIntervalMs has passed since the previous request started. */
+    private async waitForRequestSlot(): Promise<void> {
+        const interval = this.retryOptions.minRequestIntervalMs ?? 0;
+        const now = this.retryOptions.now ?? (() => performance.now());
+        if (interval > 0 && this.lastRequestStartedAt !== undefined) {
+            const wait = this.lastRequestStartedAt + interval - now();
+            if (wait > 0) {
+                await this.retryOptions.sleep(Math.ceil(wait));
+            }
+        }
+        this.lastRequestStartedAt = now();
+    }
+}
+
+function isNonNegativeOrUnset(value: number | undefined): boolean {
+    return value === undefined || (Number.isFinite(value) && value >= 0);
+}
+
+/**
+ * Pause before the next retry: the server's own hint when it gives one (Gemini 429 bodies carry
+ * "retryDelay", OpenAI sends a Retry-After header), otherwise exponential backoff.
+ */
+export function retryDelayMs(error: unknown, retry: number, options: RetryOptions): number {
+    const suggested = serverSuggestedDelayMs(error);
+    if (suggested !== undefined) {
+        return Math.min(suggested + 1_000, MAX_SERVER_RETRY_DELAY_MS);
+    }
+    return Math.min(options.baseDelayMs * 2 ** retry, options.maxDelayMs ?? 60_000);
+}
+
+function serverSuggestedDelayMs(error: unknown): number | undefined {
+    const message = getErrorMessage(error);
+    const fromBody =
+        /"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/.exec(message) ??
+        /retry in (\d+(?:\.\d+)?)\s*s/i.exec(message);
+    if (fromBody) {
+        return Math.ceil(Number(fromBody[1]) * 1_000);
+    }
+    if (typeof error !== 'object' || error === null || !('headers' in error)) {
+        return undefined;
+    }
+    const headers = error.headers;
+    let retryAfter: unknown;
+    if (headers instanceof Headers) {
+        retryAfter = headers.get('retry-after');
+    } else if (typeof headers === 'object' && headers !== null && 'retry-after' in headers) {
+        retryAfter = (headers as Record<string, unknown>)['retry-after'];
+    }
+    const seconds = typeof retryAfter === 'string' ? Number(retryAfter) : NaN;
+    return Number.isFinite(seconds) && seconds >= 0 ? Math.ceil(seconds * 1_000) : undefined;
 }
 
 function createAttemptRecord(attempt: number): AttemptRecord {
@@ -645,6 +730,8 @@ function isFatalConfigurationError(error: unknown): boolean {
     const candidate = error as { status?: unknown; message?: unknown };
     if (
         candidate.status === 401 ||
+        // 402: billing/prepaid credits exhausted; every further request fails the same way.
+        candidate.status === 402 ||
         candidate.status === 403
     ) {
         return true;

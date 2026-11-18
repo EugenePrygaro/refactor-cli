@@ -79,7 +79,43 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=Path("analysis/out"),
         help="Output directory (default: analysis/out).",
     )
+    parser.add_argument(
+        "--merge-runs",
+        action="store_true",
+        help=(
+            "Treat all given run directories of the same model as one run, e.g. a main run "
+            "plus a re-run of its Invalid components. Without it, each directory is a "
+            "separate repetition and RQ1 averages their success rates."
+        ),
+    )
     return parser.parse_args(argv)
+
+
+def merge_runs(
+    reports: pd.DataFrame, attempts: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Combine several run directories per model into one logical run.
+
+    Only attempts of evaluated (Success/Fail) rows are kept, so attempts from a run where a
+    component was Invalid do not leak into the merged run. A component evaluated in more
+    than one directory would be counted twice, so that is rejected.
+    """
+    keys = ["run_id", "model", "component"]
+    evaluated = reports.loc[reports["status"].isin(ELIGIBLE_STATUSES), keys]
+    duplicated = evaluated.duplicated(["model", "component"], keep=False)
+    if duplicated.any():
+        pairs = evaluated.loc[duplicated, ["model", "component"]].drop_duplicates()
+        listed = ", ".join(f"{row.model}/{row.component}" for row in pairs.itertuples())
+        raise ValueError(
+            f"Cannot merge runs: components evaluated in more than one run: {listed}"
+        )
+    attempts = attempts.merge(evaluated.drop_duplicates(), on=keys, how="inner")
+    merged_ids = reports.groupby("model")["run_id"].agg(
+        lambda ids: "+".join(sorted(set(ids)))
+    )
+    reports = reports.assign(run_id=reports["model"].map(merged_ids))
+    attempts = attempts.assign(run_id=attempts["model"].map(merged_ids))
+    return reports, attempts
 
 
 def discover_runs(results_root: Path) -> list[Path]:
@@ -119,14 +155,16 @@ def load_runs(run_dirs: list[Path]) -> tuple[pd.DataFrame, pd.DataFrame]:
         run_id = str(metadata.get("runId") or run_dir.name)
         model = str(metadata.get("model") or "unknown")
 
-        reports = pd.read_csv(report_csv)
+        # pandas treats the string "None" as missing by default, which would hide the
+        # failure_stage "None" that marks a successful attempt; only empty cells are missing.
+        reports = pd.read_csv(report_csv, keep_default_na=False, na_values=[""])
         reports["run_id"] = run_id
         reports["model"] = model
         reports["component"] = reports["component"].astype(str)
         reports["status"] = reports["status"].astype(str).str.strip().str.lower()
         report_frames.append(reports)
 
-        attempts = pd.read_csv(attempts_csv)
+        attempts = pd.read_csv(attempts_csv, keep_default_na=False, na_values=[""])
         if not attempts.empty:
             attempts["run_id"] = run_id
             attempts["model"] = model
@@ -320,11 +358,22 @@ def build_rq2(reports: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=columns)
 
 
+def class_components(reports: pd.DataFrame) -> set[str] | None:
+    """Components the runs identified as React class components, or None if unknown."""
+    if "is_class_component" not in reports or reports.empty:
+        return None
+    flags = reports["is_class_component"].astype(str).str.strip().str.lower()
+    return set(reports.loc[flags.eq("true"), "component"].astype(str))
+
+
 def build_rq3(
     attempts: pd.DataFrame,
     success_attempts: pd.DataFrame,
     token_csv: Path,
+    eta_components: set[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """eta_components limits the static token savings to the analysed (class) components;
+    without it every row of the token CSV, including non-class inputs, would be averaged."""
     component_columns = [
         "run_id",
         "model",
@@ -371,6 +420,10 @@ def build_rq3(
         for column in ("tokens_sliced", "tokens_full", "eta"):
             if column in token_data:
                 token_data[column] = pd.to_numeric(token_data[column], errors="coerce")
+        if eta_components is not None and "component" in token_data:
+            token_data = token_data.loc[
+                token_data["component"].astype(str).isin(eta_components)
+            ]
         eta = (
             token_data.groupby("model", as_index=False)["eta"]
             .agg(eta_mean="mean", eta_median="median", eta_n="count")
@@ -598,16 +651,19 @@ def run_analysis(
     run_dirs: list[Path],
     token_csv: Path,
     output_dir: Path,
+    merge: bool = False,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     reports, attempts = load_runs(run_dirs)
+    if merge:
+        reports, attempts = merge_runs(reports, attempts)
     eligible_reports, eligible_attempts, success_attempts = prepare_data(
         reports, attempts
     )
     rq1, _ = build_rq1(success_attempts)
     rq2 = build_rq2(eligible_reports)
     rq3_components, rq3_summary, rq3_histogram = build_rq3(
-        eligible_attempts, success_attempts, token_csv
+        eligible_attempts, success_attempts, token_csv, class_components(reports)
     )
     rq4_summary, rq4_distribution = build_rq4(
         eligible_reports, eligible_attempts
@@ -624,7 +680,7 @@ def main(argv: list[str] | None = None) -> int:
     runs = args.runs or discover_runs(args.results_root)
     token_csv = args.tokens or args.results_root / "tokens" / "prompt-tokens.csv"
     try:
-        run_analysis(runs, token_csv, args.out)
+        run_analysis(runs, token_csv, args.out, merge=args.merge_runs)
     except (OSError, ValueError, json.JSONDecodeError, pd.errors.ParserError) as error:
         print(f"Analysis failed: {error}", file=sys.stderr)
         return 1

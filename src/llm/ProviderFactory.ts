@@ -28,7 +28,7 @@ export function createProvider(
         case 'gemini':
             return new GeminiProvider(
                 requiredEnvironmentVariable('GEMINI_API_KEY', 'gemini'),
-                selectedModel || process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash',
+                selectedModel || process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash',
                 seed,
             );
         case 'openai':

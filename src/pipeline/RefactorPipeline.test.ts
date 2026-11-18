@@ -2,7 +2,12 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LLMProvider, RefactoringContext } from '../llm/LLMProvider';
-import { PipelineError, RefactorPipeline, type VerificationStep } from './RefactorPipeline';
+import {
+    PipelineError,
+    RefactorPipeline,
+    retryDelayMs,
+    type VerificationStep,
+} from './RefactorPipeline';
 
 const temporaryDirectories: string[] = [];
 
@@ -60,6 +65,154 @@ describe('RefactorPipeline', () => {
         expect(result.attempts[0].apiRetries).toBe(2);
         expect(calls).toBe(3);
         expect(delays).toEqual([50, 100]);
+    });
+
+    it('marks the component Invalid without spending attempts when the API never answers', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        let calls = 0;
+        const llm: LLMProvider = {
+            name: 'test',
+            providerName: 'gemini',
+            modelName: 'test-model',
+            async refactorComponent() {
+                calls++;
+                throw Object.assign(new Error('high demand'), { status: 503 });
+            },
+        };
+
+        const error = await new RefactorPipeline(llm, 3, [{
+            name: 'Test',
+            async verify() {
+                return [];
+            },
+        }], {
+            maxRetries: 2,
+            baseDelayMs: 0,
+            sleep: async () => undefined,
+        }).runWithAttempts(sourcePath, '', '').catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(PipelineError);
+        expect(error).toMatchObject({
+            componentStatus: 'Invalid',
+            failureStage: 'Infrastructure',
+            fatal: false,
+            retries: 2,
+        });
+        expect((error as PipelineError).attempts).toHaveLength(1);
+        expect((error as PipelineError).attempts[0]).toMatchObject({
+            failureStage: 'Infrastructure',
+            errorCategory: 'infrastructure',
+            apiRetries: 2,
+        });
+        expect(calls).toBe(3);
+    });
+
+    it('waits for the delay a rate-limited server asks for', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        const delays: number[] = [];
+        let calls = 0;
+        const llm: LLMProvider = {
+            name: 'test',
+            providerName: 'gemini',
+            modelName: 'test-model',
+            async refactorComponent() {
+                calls++;
+                if (calls === 1) {
+                    throw Object.assign(
+                        new Error('{"error":{"code":429,"details":[{"retryDelay":"26s"}]}}'),
+                        { status: 429 },
+                    );
+                }
+                return {
+                    generatedCode: 'export const value = 1;',
+                    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+                };
+            },
+        };
+
+        const result = await new RefactorPipeline(llm, 3, [{
+            name: 'Test',
+            async verify() {
+                return [];
+            },
+        }], {
+            maxRetries: 3,
+            baseDelayMs: 50,
+            sleep: async (milliseconds) => {
+                delays.push(milliseconds);
+            },
+        }).runWithAttempts(sourcePath, '', '');
+
+        expect(result.attemptCount).toBe(1);
+        expect(delays).toEqual([27_000]);
+    });
+
+    it('spaces model requests by the minimum request interval', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        let clock = 0;
+        const sleeps: number[] = [];
+        const llm: LLMProvider = {
+            name: 'test',
+            providerName: 'gemini',
+            modelName: 'test-model',
+            async refactorComponent() {
+                clock += 2_000;
+                return {
+                    generatedCode: 'export const value = 1;',
+                    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+                };
+            },
+        };
+        let verifications = 0;
+        const pipeline = new RefactorPipeline(llm, 3, [{
+            name: 'Test',
+            async verify() {
+                verifications++;
+                return verifications === 1 ? ['retry'] : [];
+            },
+        }], {
+            maxRetries: 0,
+            baseDelayMs: 0,
+            minRequestIntervalMs: 12_000,
+            now: () => clock,
+            sleep: async (milliseconds) => {
+                sleeps.push(milliseconds);
+                clock += milliseconds;
+            },
+        });
+
+        const result = await pipeline.runWithAttempts(sourcePath, '', '');
+
+        expect(result.attemptCount).toBe(2);
+        expect(sleeps).toEqual([10_000]);
+    });
+
+    it('computes retry delays from server hints, Retry-After headers, or backoff', () => {
+        const options = { maxRetries: 3, baseDelayMs: 15_000, sleep: async () => undefined };
+
+        expect(retryDelayMs(new Error('Please retry in 26.17s.'), 0, options)).toBe(27_170);
+        expect(
+            retryDelayMs(
+                Object.assign(new Error('rate limited'), {
+                    headers: new Headers({ 'retry-after': '5' }),
+                }),
+                0,
+                options,
+            ),
+        ).toBe(6_000);
+        expect(retryDelayMs(new Error('overloaded'), 0, options)).toBe(15_000);
+        expect(retryDelayMs(new Error('overloaded'), 1, options)).toBe(30_000);
+        expect(retryDelayMs(new Error('overloaded'), 3, options)).toBe(60_000);
+        expect(retryDelayMs(new Error('Please retry in 600s.'), 0, options)).toBe(120_000);
     });
 
     it('does not retry non-transient model errors', async () => {
@@ -485,6 +638,30 @@ describe('RefactorPipeline', () => {
                 }),
             ],
         });
+        expect(calls).toBe(1);
+    });
+
+    it('aborts the run when billing credits are exhausted (402)', async () => {
+        const directory = await mkdtemp(path.join(process.cwd(), '.pipeline-test-'));
+        temporaryDirectories.push(directory);
+        const sourcePath = path.join(directory, 'Source.tsx');
+        await writeFile(sourcePath, 'export const value = 1;');
+        let calls = 0;
+        const llm: LLMProvider = {
+            name: 'test',
+            providerName: 'gemini',
+            modelName: 'test-model',
+            async refactorComponent() {
+                calls++;
+                throw Object.assign(new Error('Your prepayment credits are depleted.'), {
+                    status: 402,
+                });
+            },
+        };
+
+        await expect(
+            new RefactorPipeline(llm).runWithAttempts(sourcePath, '', ''),
+        ).rejects.toMatchObject({ fatal: true, failureStage: 'Generation' });
         expect(calls).toBe(1);
     });
 

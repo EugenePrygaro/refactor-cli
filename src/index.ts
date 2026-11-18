@@ -13,6 +13,7 @@ import {
     type FailureStage,
     type AttemptRecord,
     DEFAULT_MAX_ATTEMPTS,
+    DEFAULT_RETRY_OPTIONS,
     PipelineError,
     RefactorPipeline,
 } from './pipeline/RefactorPipeline';
@@ -27,6 +28,8 @@ export interface CliOptions {
     runId?: string;
     components?: string[];
     classOnly?: boolean;
+    /** Minimum seconds between model requests (e.g. 12 for a 5-requests-per-minute free tier). */
+    requestInterval?: number;
 }
 
 export interface ComponentJob {
@@ -58,6 +61,14 @@ function parseSeed(value: string): number {
         throw new Error('Seed must be a safe integer.');
     }
     return seed;
+}
+
+function parseRequestInterval(value: string): number {
+    const seconds = Number(value);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+        throw new Error('Request interval must be a non-negative number of seconds.');
+    }
+    return seconds;
 }
 
 function sourceFileName(files: string[], componentName: string): string {
@@ -201,6 +212,7 @@ export async function runCli(
     const modelVersion = provider.getModelVersion
         ? await provider.getModelVersion()
         : null;
+    const requestIntervalMs = Math.round((options.requestInterval ?? 0) * 1_000);
     await writeFile(
         path.join(outputPath, 'run.json'),
         `${JSON.stringify(
@@ -218,13 +230,17 @@ export async function runCli(
                     provider.providerName === 'ollama'
                         ? Number(process.env.OLLAMA_NUM_CTX) || 32_768
                         : null,
+                requestIntervalMs,
             },
             null,
             2,
         )}\n`,
         'utf8',
     );
-    const pipeline = new RefactorPipeline(provider);
+    const pipeline = new RefactorPipeline(provider, DEFAULT_MAX_ATTEMPTS, undefined, {
+        ...DEFAULT_RETRY_OPTIONS,
+        minRequestIntervalMs: requestIntervalMs,
+    });
     const reporter = new CsvReporter(path.join(outputPath, 'report.csv'));
     const attemptReporter = new AttemptCsvReporter(
         path.join(outputPath, 'attempts.csv'),
@@ -381,6 +397,11 @@ program
         parseComponentIds,
     )
     .option('--run-id <id>', 'Run identifier (must be unique within the output directory)')
+    .option(
+        '--request-interval <seconds>',
+        'Minimum seconds between model requests (e.g. 12 for a 5 requests/minute free tier)',
+        parseRequestInterval,
+    )
     .action(async (options: CliOptions) => {
         await runCli(options);
     });

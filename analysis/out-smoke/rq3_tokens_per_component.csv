@@ -1,0 +1,2 @@
+run_id,model,component,prompt_tokens,completion_tokens,total_tokens,success_attempt
+smoke-gemini-3,gemini-3.8-flash,component-06,4611,3452,18567,2.0

@@ -14,7 +14,7 @@ import {
 import { discoverComponentJobs } from '../src/index';
 
 const GPT_MODEL = 'gpt-4o-mini';
-const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-2.0-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL?.trim() || 'gemini-3.8-flash';
 
 interface OllamaGenerateResponse {
     prompt_eval_count?: number;
